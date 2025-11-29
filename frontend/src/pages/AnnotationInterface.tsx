@@ -17,25 +17,34 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
+  labelTypeId: string | null;
 }
 
-interface Label {
+interface LabelType {
   id: string;
-  projectId: string;
   name: string;
+  description: string | null;
+}
+
+interface LabelClass {
+  id: string;
+  name: string;
+  labelTypeId: string;
 }
 
 interface Image {
   id: string;
-  projectId: string;
   filename: string;
   url: string;
+  uploadedAt: string;
 }
 
 interface Annotation {
   id: string;
   imageId: string;
-  labelId: string;
+  labelClassesId: string;
+  userId: string;
+  projectId: string;
 }
 
 export default function AnnotationInterface() {
@@ -45,11 +54,12 @@ export default function AnnotationInterface() {
 
   const [user, setUser] = useState<User | null>(null);
   const [project, setProject] = useState<Project | null>(null);
-  const [labels, setLabels] = useState<Label[]>([]);
+  const [labelType, setLabelType] = useState<LabelType | null>(null);
+  const [labelClasses, setLabelClasses] = useState<LabelClass[]>([]);
   const [images, setImages] = useState<Image[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const [selectedLabelClassId, setSelectedLabelClassId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +74,16 @@ export default function AnnotationInterface() {
       setError(null);
 
       // Fetch user
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setLocation('/login');
+        return;
+      }
+
       const userResponse = await fetch('/api/auth/me', {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!userResponse.ok) {
@@ -78,7 +96,9 @@ export default function AnnotationInterface() {
 
       // Fetch project
       const projectResponse = await fetch(`/api/projects/${projectId}`, {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!projectResponse.ok) {
@@ -86,56 +106,170 @@ export default function AnnotationInterface() {
       }
 
       const projectData = await projectResponse.json();
+      console.log('Project data:', projectData);
       setProject(projectData);
 
-      // Fetch labels
-      const labelsResponse = await fetch(`/api/projects/${projectId}/labels`, {
-        credentials: 'include',
-      });
-
-      if (labelsResponse.ok) {
-        const labelsData = await labelsResponse.json();
-        setLabels(labelsData);
+      // If project has a label type, fetch the label type and its classes
+      if (projectData.labelTypeId) {
+        await fetchLabelTypeAndClasses(projectData.labelTypeId);
+      } else {
+        console.warn('Project has no label type assigned');
+        setLabelClasses([]);
       }
 
-      // Fetch images
+      // Fetch images for this project
       const imagesResponse = await fetch(`/api/projects/${projectId}/images`, {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
-      if (imagesResponse.ok) {
-        const imagesData = await imagesResponse.json();
-        setImages(imagesData);
+      if (!imagesResponse.ok) {
+        throw new Error(`Failed to load images: ${imagesResponse.status}`);
+      }
 
-        // Load annotations for current image if there are images
-        if (imagesData.length > 0) {
-          await loadAnnotations(imagesData[0].id);
-        }
+      const imagesData = await imagesResponse.json();
+      console.log('Images data:', imagesData);
+      
+      // Handle different response structures
+      let imagesArray;
+      if (Array.isArray(imagesData)) {
+        imagesArray = imagesData;
+      } else if (imagesData && Array.isArray(imagesData.data)) {
+        imagesArray = imagesData.data;
+      } else if (imagesData && Array.isArray(imagesData.images)) {
+        imagesArray = imagesData.images;
+      } else {
+        console.warn('Unexpected images response format:', imagesData);
+        imagesArray = [];
+      }
+      
+      setImages(imagesArray);
+
+      // Load annotations for current image if there are images
+      if (imagesArray.length > 0) {
+        await loadAnnotations(imagesArray[0].id);
       }
     } catch (err: any) {
+      console.error('Load data error:', err);
       setError(err.message || 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadAnnotations = async (imageId: string) => {
+  const fetchLabelTypeAndClasses = async (labelTypeId: string) => {
     try {
-      const response = await fetch(`/api/images/${imageId}/annotations`, {
-        credentials: 'include',
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
+      // Fetch label type details
+      const labelTypeResponse = await fetch(`/api/label-types/${labelTypeId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAnnotations(data);
-
-        // If there's an existing annotation, pre-select it
-        if (data.length > 0) {
-          setSelectedLabelId(data[0].labelId);
+      if (labelTypeResponse.ok) {
+        const labelTypeData = await labelTypeResponse.json();
+        console.log('Label type data:', labelTypeData);
+        
+        // Handle different response structures
+        let labelTypeObj;
+        if (labelTypeData && labelTypeData.id) {
+          labelTypeObj = labelTypeData;
+        } else if (labelTypeData && labelTypeData.data) {
+          labelTypeObj = labelTypeData.data;
+        } else {
+          console.warn('Unexpected label type response format:', labelTypeData);
+          labelTypeObj = null;
         }
+        setLabelType(labelTypeObj);
+      }
+
+      console.log(labelTypeId)
+      // Fetch label classes for this label type
+      const labelClassesResponse = await fetch(`/api/label-types/${labelTypeId}/classes`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (labelClassesResponse.ok) {
+        const labelClassesData = await labelClassesResponse.json();
+        console.log('Label classes data:', labelClassesData.data);
+        
+        // Handle different response structures
+        let classesArray;
+        if (Array.isArray(labelClassesData)) {
+          classesArray = labelClassesData;
+        } else if (labelClassesData && Array.isArray(labelClassesData.data)) {
+          classesArray = labelClassesData.data;
+        } else if (labelClassesData && Array.isArray(labelClassesData.classes)) {
+          classesArray = labelClassesData.classes;
+        } else {
+          console.warn('Unexpected label classes response format:', labelClassesData);
+          classesArray = [];
+        }
+        setLabelClasses(classesArray);
+      } else {
+        console.error('Failed to fetch label classes:', labelClassesResponse.status);
+        setLabelClasses([]);
+      }
+    } catch (err) {
+      console.error('Error fetching label type and classes:', err);
+      setLabelClasses([]);
+    }
+  };
+
+  const loadAnnotations = async (imageId: string) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await fetch(`/api/images/${imageId}/annotations`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`No annotations found for image ${imageId}:`, response.status);
+        setAnnotations([]);
+        setSelectedLabelClassId(null);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('Annotations data:', data);
+      
+      // Handle different response structures
+      let annotationsArray;
+      if (Array.isArray(data)) {
+        annotationsArray = data;
+      } else if (data && Array.isArray(data.data)) {
+        annotationsArray = data.data;
+      } else if (data && Array.isArray(data.annotations)) {
+        annotationsArray = data.annotations;
+      } else {
+        console.warn('Unexpected annotations response format:', data);
+        annotationsArray = [];
+      }
+      
+      setAnnotations(annotationsArray);
+
+      // If there's an existing annotation, pre-select it
+      if (annotationsArray.length > 0) {
+        setSelectedLabelClassId(annotationsArray[0].labelClassesId);
+      } else {
+        setSelectedLabelClassId(null);
       }
     } catch (err) {
       console.error('Failed to load annotations:', err);
+      setAnnotations([]);
+      setSelectedLabelClassId(null);
     }
   };
 
@@ -143,12 +277,12 @@ export default function AnnotationInterface() {
     setLocation('/annotator/dashboard');
   };
 
-  const handleLabelSelect = (labelId: string) => {
-    setSelectedLabelId(labelId);
+  const handleLabelSelect = (labelClassId: string) => {
+    setSelectedLabelClassId(labelClassId);
   };
 
   const handleSaveAndNext = async () => {
-    if (!selectedLabelId || !user) return;
+    if (!selectedLabelClassId || !user || !project) return;
 
     const currentImage = images[currentImageIndex];
     if (!currentImage) return;
@@ -158,34 +292,53 @@ export default function AnnotationInterface() {
 
     try {
       // Create annotation
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
       const response = await fetch('/api/annotations', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
+          projectId: project.id,
           imageId: currentImage.id,
-          labelId: selectedLabelId,
+          labelClassesId: selectedLabelClassId,
+          labelId: labelType?.id
         }),
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save annotation');
+        const errorText = await response.text();
+        console.error('Annotation save error:', errorText);
+        let errorMessage = 'Failed to save annotation';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${response.status}`;
+        }
+        throw new Error(errorMessage);
       }
+
+      const annotationData = await response.json();
+      console.log('Annotation saved:', annotationData);
 
       // Move to next image
       if (currentImageIndex < images.length - 1) {
         const nextIndex = currentImageIndex + 1;
         setCurrentImageIndex(nextIndex);
-        setSelectedLabelId(null);
+        setSelectedLabelClassId(null);
         await loadAnnotations(images[nextIndex].id);
       } else {
-        alert('Annotation complete!');
+        alert('Annotation complete! All images have been annotated.');
         setLocation('/annotator/dashboard');
       }
     } catch (err: any) {
+      console.error('Save annotation error:', err);
       setError(err.message || 'Failed to save annotation');
     } finally {
       setIsSaving(false);
@@ -196,7 +349,7 @@ export default function AnnotationInterface() {
     if (currentImageIndex > 0) {
       const prevIndex = currentImageIndex - 1;
       setCurrentImageIndex(prevIndex);
-      setSelectedLabelId(null);
+      setSelectedLabelClassId(null);
       await loadAnnotations(images[prevIndex].id);
     }
   };
@@ -208,10 +361,16 @@ export default function AnnotationInterface() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+    }
+    localStorage.removeItem('authToken');
     setLocation('/login');
   };
 
@@ -313,9 +472,17 @@ export default function AnnotationInterface() {
 
                 {/* Title & Progress */}
                 <div className="flex items-center justify-between">
-                  <h1 className="text-2xl font-bold">{project?.name || 'Project'}</h1>
+                  <div>
+                    <h1 className="text-2xl font-bold">{project?.name || 'Project'}</h1>
+                    {labelType && (
+                      <p className="text-sm text-muted-foreground">
+                        Label Type: {labelType.name}
+                        {labelType.description && ` - ${labelType.description}`}
+                      </p>
+                    )}
+                  </div>
                   <div className="text-sm text-muted-foreground" data-testid="text-progress">
-                    Image {currentImageIndex + 1} of {images.length}
+                    {images.length > 0 ? `Image ${currentImageIndex + 1} of ${images.length}` : 'No images available'}
                   </div>
                 </div>
 
@@ -332,86 +499,87 @@ export default function AnnotationInterface() {
                       {/* Image Display */}
                       <Card className="p-8">
                         <div className="flex items-center justify-center bg-muted rounded-lg" style={{ minHeight: '400px' }}>
-                          {currentImage && (
-                              <img
-                                  src={currentImage.url}
-                                  alt={currentImage.filename}
-                                  className="max-h-[500px] max-w-full object-contain rounded-lg"
-                                  data-testid="img-annotation"
-                              />
-                          )}
+                          <img
+                              src={currentImage.url}
+                              alt={currentImage.filename}
+                              className="max-h-[400px] max-w-full object-contain rounded-lg"
+                              onError={(e) => {
+                                console.error('Image failed to load:', currentImage.url);
+                                e.currentTarget.src = '/api/placeholder/400/300';
+                              }}
+                          />
                         </div>
                       </Card>
 
-                      {/* Label Selection */}
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold">Select Label</h3>
-                        {labels.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No labels available for this project.</p>
-                        ) : (
-                            <div className="grid grid-cols-2 gap-4">
-                              {labels.map((label) => (
+                      {/* Annotation Controls */}
+                      <div className="flex flex-col md:flex-row gap-6">
+                        {/* Label Classes */}
+                        <Card className="flex-1 p-4 space-y-4">
+                          <h3 className="text-lg font-semibold">
+                            Select Label Class
+                            {labelType && ` (${labelType.name})`}
+                          </h3>
+                          {labelClasses.length === 0 ? (
+                            <div className="text-center py-4">
+                              <p className="text-muted-foreground">
+                                {project?.labelTypeId 
+                                  ? "No label classes available for this label type." 
+                                  : "This project doesn't have a label type assigned."}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {labelClasses.map((labelClass) => (
                                   <Button
-                                      key={label.id}
-                                      variant={selectedLabelId === label.id ? 'default' : 'outline'}
-                                      className="h-auto py-4 text-base"
-                                      onClick={() => handleLabelSelect(label.id)}
-                                      disabled={isSaving}
-                                      data-testid={`button-label-${label.name.toLowerCase().replace(/\s+/g, '-')}`}
+                                      key={labelClass.id}
+                                      variant={selectedLabelClassId === labelClass.id ? 'default' : 'outline'}
+                                      onClick={() => handleLabelSelect(labelClass.id)}
+                                      data-testid={`button-label-class-${labelClass.id}`}
                                   >
-                                    {label.name}
+                                    {labelClass.name}
                                   </Button>
                               ))}
                             </div>
-                        )}
-                      </div>
+                          )}
+                        </Card>
 
-                      {/* Navigation Buttons */}
-                      <div className="flex items-center justify-between gap-4 pt-4">
-                        <Button
-                            variant="outline"
-                            onClick={handlePrevious}
-                            disabled={currentImageIndex === 0 || isSaving}
-                            data-testid="button-back"
-                        >
-                          Back
-                        </Button>
-
-                        <div className="flex gap-4">
-                          <Button
-                              variant="outline"
-                              onClick={handleSaveAndNext}
-                              disabled={!selectedLabelId || isSaving}
-                              data-testid="button-save-next"
-                          >
-                            {isSaving ? 'Saving...' : 'Save and Next'}
-                          </Button>
-                          <Button
-                              variant="destructive"
-                              onClick={handleExit}
-                              disabled={isSaving}
-                              data-testid="button-exit"
-                          >
-                            Exit
-                          </Button>
-                        </div>
+                        {/* Navigation */}
+                        <Card className="p-4 flex flex-col justify-between w-full md:w-64">
+                          <h3 className="text-lg font-semibold mb-4">Navigation</h3>
+                          <div className="space-y-2">
+                            <Button
+                                className="w-full"
+                                variant="secondary"
+                                onClick={handlePrevious}
+                                disabled={currentImageIndex === 0}
+                                data-testid="button-previous"
+                            >
+                              Previous
+                            </Button>
+                            <Button
+                                className="w-full"
+                                onClick={handleSaveAndNext}
+                                disabled={!selectedLabelClassId || isSaving || labelClasses.length === 0}
+                                data-testid="button-save-next"
+                            >
+                              {isSaving ? 'Saving...' : 'Save & Next'}
+                            </Button>
+                            <Button
+                                className="w-full"
+                                variant="destructive"
+                                onClick={handleExit}
+                                data-testid="button-exit"
+                            >
+                              Exit
+                            </Button>
+                          </div>
+                        </Card>
                       </div>
                     </>
                 )}
               </div>
             </div>
           </main>
-        </div>
-
-        {/* Sign out */}
-        <div className="border-t p-4">
-          <button
-              onClick={handleLogout}
-              className="text-sm text-muted-foreground hover:text-foreground"
-              data-testid="link-sign-out"
-          >
-            Sign out
-          </button>
         </div>
       </div>
   );

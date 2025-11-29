@@ -142,7 +142,7 @@ export default function AssignRole() {
                 <th className="text-left p-4 font-semibold">User Name</th>
                 <th className="text-center p-4 font-semibold">Data specialist</th>
                 <th className="text-center p-4 font-semibold">Annotator</th>
-                <th className="text-center p-4 font-semibold">ML Engineer</th>
+                <th className="text-center p-4 font-semibold">Admin</th>
                 <th className="text-center p-4 font-semibold">Status</th>
               </tr>
             </thead>

@@ -24,11 +24,14 @@ export interface IStorage {
   getProjectsByCreator(userId: string): Promise<Project[]>;
   getProjectsByAnnotator(userId: string): Promise<Project[]>;
   createProject(project: InsertProject): Promise<Project>;
+
+  deleteProject(id: string): Promise<void>
+  
   // getProjectProgress(projectId: string): Promise<{ totalImages: number, annotatedImages: number }>;
   updateProjectStatus(id: string, status: "not_started" | "in_progress" | "completed"): Promise<void>;
 
   assignImagesToProject(projectId: string, imageIds: string[]): Promise<ProjectImage[]>
-
+  removeImageAssignment(projectId: string, imageId: string): Promise<ProjectImage>
   getProjectStats(projectId: string): Promise<{
     numberOfImages: number;
     annotatedImages: number;
@@ -132,7 +135,16 @@ export class DbStorage implements IStorage {
   }
 
   async getProjectsByCreator(userId: string): Promise<Project[]> {
-    return await db.select().from(projects).where(eq(projects.createdBy, userId));
+    const projectWOstats = await db.select().from(projects).where(eq(projects.createdBy, userId));
+    const projectsWithProgress = await Promise.all(
+        projectWOstats.map(async (a) => {
+          const progress = await this.getProjectStats(a.id);
+          return { ...a, ...progress };
+          // return { ...a.project};
+        })
+    );
+
+    return projectsWithProgress;
   }
 
   async getProjectsByAnnotator(userId: string): Promise<Project[]> {
@@ -144,9 +156,9 @@ export class DbStorage implements IStorage {
 
     const projectsWithProgress = await Promise.all(
         assignments.map(async (a) => {
-          // const progress = await this.getProjectProgress(a.project.id);
-          // return { ...a.project, ...progress };
-          return { ...a.project};
+          const progress = await this.getProjectStats(a.project.id);
+          return { ...a.project, ...progress };
+          // return { ...a.project};
         })
     );
 
@@ -156,6 +168,10 @@ export class DbStorage implements IStorage {
   async createProject(insertProject: InsertProject): Promise<Project> {
     const [project] = await db.insert(projects).values(insertProject).returning();
     return project;
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await db.delete(projects).where(eq(projects.id, id));
   }
 
   async updateProjectStatus(id: string, status: "not_started" | "in_progress" | "completed"): Promise<void> {
@@ -275,7 +291,13 @@ export class DbStorage implements IStorage {
     return labelClass;
   }
 
-
+  async removeImageAssignment(projectId: string, imageId: string): Promise<ProjectImage> {
+    const [image] = await db.delete(projectImages).where(and(eq(projectImages.projectId, projectId),eq(projectImages.imageId, imageId))).returning();
+    if (!image) {
+      throw new Error(`image with id ${imageId} not found in project ${projectId}`);
+    }
+    return image;
+  }
 
   // // Image methods
   // async getImagesByProject(projectId: string): Promise<Image[]> {

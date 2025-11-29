@@ -11,6 +11,8 @@ export default function Register() {
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     role: 'annotator'
@@ -30,7 +32,7 @@ export default function Register() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-        credentials: 'include', // Importante per le sessioni
+        credentials: 'include', 
       });
 
       const data = await response.json();
@@ -39,7 +41,7 @@ export default function Register() {
         throw new Error(data.error || 'Registration failed');
       }
 
-      // Registrazione riuscita - vai al login
+     
       setLocation('/login');
     } catch (err: any) {
       setError(err.message || 'An error occurred during registration');
@@ -63,13 +65,43 @@ export default function Register() {
           )}
 
           <div className="space-y-2">
+            <Label htmlFor="firstName" className="text-sm font-medium">First Name</Label>
+            <Input
+                id="firstName"
+                type="text"
+                placeholder="e.g., Amr"
+                className="h-12"
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                required
+                disabled={isLoading}
+                data-testid="input-first-name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lastName" className="text-sm font-medium">Last Name</Label>
+            <Input
+                id="lastName"
+                type="text"
+                placeholder="e.g., Elmasry"
+                className="h-12"
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                required
+                disabled={isLoading}
+                data-testid="input-last-name"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="name" className="text-sm font-medium">Username</Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                   id="name"
                   type="text"
-                  placeholder="Enter your name"
+                  placeholder="Enter your username"
                   className="pl-10 h-12"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}

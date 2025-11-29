@@ -13,6 +13,8 @@ export default function CreateAccount() {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: '',
+    firstName: '', // <-- NEW
+    lastName: '',
     email: '',
     password: '',
     role: 'annotator' as 'annotator' | 'data_specialist' | 'admin',
@@ -52,6 +54,8 @@ export default function CreateAccount() {
       // Reset form
       setFormData({
         name: '',
+        firstName: '', // <-- NEW
+        lastName: '',
         email: '',
         password: '',
         role: 'annotator',
@@ -97,11 +101,37 @@ export default function CreateAccount() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  type="text"
+                  placeholder="e.g, Amr"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  type="text"
+                  placeholder="e.g, Elmasry"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">Username</Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="e.g, Amr"
+                  placeholder="e.g, Amr_14"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
