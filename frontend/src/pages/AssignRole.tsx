@@ -68,6 +68,7 @@ export default function AssignRole() {
 
       if (!response.ok) {
         const data = await response.json();
+        console.error("Failed to update role: ", data);
         throw new Error(data.error || 'Failed to update role');
       }
 
@@ -143,6 +144,7 @@ export default function AssignRole() {
                 <th className="text-center p-4 font-semibold">Data specialist</th>
                 <th className="text-center p-4 font-semibold">Annotator</th>
                 <th className="text-center p-4 font-semibold">Admin</th>
+                <th className="text-center p-4 font-semibold">ML Engineer</th>
                 <th className="text-center p-4 font-semibold">Status</th>
               </tr>
             </thead>
@@ -171,6 +173,14 @@ export default function AssignRole() {
                       <Checkbox
                         checked={isRoleSelected(user.id, 'admin')}
                         onCheckedChange={() => handleRoleChange(user.id, 'admin')}
+                      />
+                    </div>
+                  </td>
+                  <td className="p-4 text-center">
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={isRoleSelected(user.id, 'ml_engineer')}
+                        onCheckedChange={() => handleRoleChange(user.id, 'ml_engineer')}
                       />
                     </div>
                   </td>
