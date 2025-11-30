@@ -52,8 +52,16 @@ export default function ImagePortfolio() {
       setUserError(null);
 
       // Fetch current user
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setLocation('/login');
+        return;
+      }
+
       const userResponse = await fetch('/api/auth/me', {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!userResponse.ok) {
@@ -72,7 +80,9 @@ export default function ImagePortfolio() {
 
       // Fetch projects for filter dropdown
       const projectsResponse = await fetch('/api/projects', {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (projectsResponse.ok) {
@@ -87,10 +97,16 @@ export default function ImagePortfolio() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+    }
+    localStorage.removeItem('authToken');
     setLocation('/login');
   };
 
@@ -302,67 +318,41 @@ export default function ImagePortfolio() {
               <Card className="p-12 text-center">
                 <CardContent>
                   <ImageIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">No images found</h3>
-                  <p className="text-muted-foreground mb-4">
-                    {filters.projectId
-                      ? 'No images in the selected project'
-                      : 'Upload some images to your projects to see them here'}
-                  </p>
-                  <Button onClick={() => setLocation('/specialist/dashboard')}>
-                    Go to Dashboard
-                  </Button>
+                  <CardTitle className="text-xl">No Images Found</CardTitle>
+                  <CardDescription className="mt-2">
+                    Adjust your filters or upload new images to your portfolio.
+                  </CardDescription>
                 </CardContent>
               </Card>
             ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {data?.images.map((image) => (
-                    <PortfolioImageCard
-                      key={image.id}
-                      id={image.id}
-                      filename={image.filename}
-                      url={image.url}
-                      uploadedAt={image.uploadedAt}
-                      projectName={image.projectName}
-                      projectId={image.projectId}
-                      isAnnotated={image.isAnnotated}
-                      onDelete={handleDeleteImage}
-                      onNavigateToProject={handleNavigateToProject}
-                    />
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {data?.images.map((image) => (
+                  <PortfolioImageCard
+                    key={image.id}
+                    image={image}
+                    onDelete={handleDeleteImage}
+                    onNavigateToProject={handleNavigateToProject}
+                  />
+                ))}
+              </div>
+            )}
 
-                {/* Load More Button */}
-                {data && data.images.length < data.total && (
-                  <div className="flex justify-center pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={loadMore}
-                      disabled={isPortfolioLoading}
-                      data-testid="button-load-more"
-                    >
-                      {isPortfolioLoading ? 'Loading...' : `Load More (${data.total - data.images.length} remaining)`}
-                    </Button>
-                  </div>
-                )}
-              </>
+            {/* Load More Button */}
+            {data && data.images.length < data.total && (
+              <div className="text-center pt-4">
+                <Button
+                  variant="outline"
+                  onClick={loadMore}
+                  disabled={isPortfolioLoading}
+                  data-testid="button-load-more"
+                >
+                  {isPortfolioLoading ? 'Loading...' : 'Load More'}
+                </Button>
+              </div>
             )}
           </div>
         </div>
       </main>
-
-      {/* Sign out */}
-      <div className="container mx-auto px-4 pb-8">
-        <div className="max-w-7xl mx-auto">
-          <button
-            onClick={handleLogout}
-            className="text-sm text-muted-foreground hover:text-foreground"
-            data-testid="link-sign-out"
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

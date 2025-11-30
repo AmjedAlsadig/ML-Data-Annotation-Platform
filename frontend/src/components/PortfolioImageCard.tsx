@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { X, ExternalLink } from 'lucide-react';
 
-interface PortfolioImageCardProps {
+interface PortfolioImage {
   id: string;
   filename: string;
   url: string;
@@ -11,21 +11,21 @@ interface PortfolioImageCardProps {
   projectName: string;
   projectId: string;
   isAnnotated: boolean;
+}
+
+interface PortfolioImageCardProps {
+  image: PortfolioImage;
   onDelete?: (imageId: string) => void;
   onNavigateToProject?: (projectId: string) => void;
 }
 
 export function PortfolioImageCard({
-  id,
-  filename,
-  url,
-  uploadedAt,
-  projectName,
-  projectId,
-  isAnnotated,
+  image,
   onDelete,
   onNavigateToProject,
 }: PortfolioImageCardProps) {
+  const { id, filename, url, uploadedAt, projectName, projectId, isAnnotated } = image;
+
   const handleDelete = () => {
     if (onDelete) {
       onDelete(id);

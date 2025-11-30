@@ -69,8 +69,15 @@ export function usePortfolio() {
         queryParams.append('offset', queryFilters.offset.toString());
       }
 
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
       const response = await fetch(`/api/portfolio/images?${queryParams.toString()}`, {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) {
@@ -100,8 +107,15 @@ export function usePortfolio() {
     try {
       setError(null);
 
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
       const response = await fetch('/api/portfolio/images', {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) {
@@ -124,9 +138,16 @@ export function usePortfolio() {
 
   const deleteImage = useCallback(async (imageId: string) => {
     try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
       const response = await fetch(`/api/images/${imageId}`, {
         method: 'DELETE',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) {
@@ -193,8 +214,15 @@ export function usePortfolio() {
       queryParams.append('offset', newFilters.offset.toString());
     }
 
-    fetch(`/api/portfolio/images?${queryParams.toString()}`, {
-      credentials: 'include',
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
+    fetch(`/api/images?${queryParams.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     })
       .then(response => {
         if (!response.ok) {
@@ -203,10 +231,12 @@ export function usePortfolio() {
         return response.json();
       })
       .then(newData => {
-        setData(prev => prev ? {
-          ...prev,
-          images: [...prev.images, ...newData.images],
-        } : newData);
+        if(newData){
+          setData(prev => prev ? {
+            ...prev,
+            images: [...prev.images, ...newData.images],
+          } : newData);
+        }
       })
       .catch(err => {
         console.error('Load more error:', err);

@@ -28,7 +28,6 @@ export default function Login() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-        credentials: 'include', // Importante per le sessioni
       });
 
       const data = await response.json();
@@ -37,12 +36,15 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
 
+      // Store JWT token
+      localStorage.setItem('authToken', data.token);
+
       // Login riuscito - reindirizza in base al ruolo
-      if (data.role === 'annotator') {
+      if (data.user.role === 'annotator') {
         setLocation('/annotator/dashboard');
-      } else if (data.role === 'data_specialist') {
+      } else if (data.user.role === 'data_specialist') {
         setLocation('/specialist/dashboard');
-      } else if (data.role === 'admin') {
+      } else if (data.user.role === 'admin') {
         setLocation('/admin/assign-role');
       } else {
         throw new Error('Invalid user role');

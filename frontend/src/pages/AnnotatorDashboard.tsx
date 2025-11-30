@@ -18,10 +18,14 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
+  createdBy: string;
+  labelTypeId: string | null;
   status: 'not_started' | 'in_progress' | 'completed';
   createdAt: string;
-  totalImages: number;
+  numberOfImages: number;
   annotatedImages: number;
+  totalAnnotations: number;
+  activeAnnotators: number;
 }
 
 export default function AnnotatorDashboard() {
@@ -35,8 +39,16 @@ export default function AnnotatorDashboard() {
     async function loadData() {
       try {
         // Fetch current user
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setLocation('/login');
+          return;
+        }
+
         const userResponse = await fetch('/api/auth/me', {
-          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
 
         if (!userResponse.ok) {
@@ -55,7 +67,9 @@ export default function AnnotatorDashboard() {
 
         // Fetch projects
         const projectsResponse = await fetch('/api/projects', {
-          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
 
         if (projectsResponse.ok) {
@@ -77,10 +91,16 @@ export default function AnnotatorDashboard() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+    }
+    localStorage.removeItem('authToken');
     setLocation('/login');
   };
 
@@ -175,8 +195,8 @@ export default function AnnotatorDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {projects.map((project) => {
                       // Calculate progress (mock for now - we'll implement later)
-                      const progress = project.totalImages > 0
-                          ? Math.round((project.annotatedImages / project.totalImages) * 100)
+                      const progress = project.numberOfImages > 0
+                          ? Math.round((project.annotatedImages / project.numberOfImages) * 100)
                           : 0;
 
                       return (
