@@ -577,7 +577,7 @@ export default function SpecialistDashboard() {
                         </DialogDescription>
                       </DialogHeader>
 
-                      <form onSubmit={(e) => { e.preventDefault(); handleCreateProject(); }} className="space-y-6 py-4">
+                      <form onSubmit={(e) => { e.preventDefault(); handleCreateProject(); }} className="space-y-6 py-4 max-h-[90vh] overflow-y-auto">
                         {/* Project Details */}
                         <Card>
                           <CardHeader>
@@ -754,7 +754,9 @@ export default function SpecialistDashboard() {
                                 <CardHeader className="space-y-1">
                                   <div className="flex justify-between items-center">
                                     <CardTitle className="text-xl">{project.name}</CardTitle>
-                                    <Badge variant={getStatusBadgeVariant(project.status)}>{project.status.replace('_', ' ')}</Badge>
+                                    <Badge variant={getStatusBadgeVariant(project.status)}>{
+                                      projectProgress === 100 ? 'Completed' : (projectProgress > 0 ? "In Progress" : 'Not Started')
+                                      }</Badge>
                                   </div>
                                   <CardDescription>
                                     Created: {new Date(project.createdAt).toLocaleDateString()}
