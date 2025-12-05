@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { insertUserSchema, insertProjectSchema, insertLabelSchema, insertImageSchema, insertProjectImagesSchema, insertAnnotationSchema, insertLabelClassSchema, insertProjectImageSchema } from "@shared/schema";
 import multer from 'multer';
-import { uploadFile, deleteFile, initializeMinio, getFileStream } from './services/minio';
+import { uploadFile, deleteFile, initializeMinio, getFileStream, getFileMetadata, extractObjectNameFromUrl  } from './services/minio';
 import { extractImagesFromZip } from './services/zip';
 
 import jwt from "jsonwebtoken";
@@ -46,6 +46,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('MinIO initialized successfully');
   } catch (error) {
     console.error('Failed to initialize MinIO:', error);
+  }
+
+  /**
+   * Check if file is duplicate by comparing with existing files in MinIO
+   */
+  async function isDuplicate(filename: string, newFileSize: number): Promise<{ isDuplicate: boolean; existingImage?: any }> {
+    try {
+      const existingImages = await storage.getImagesByFilename(filename);
+
+      if (existingImages.length === 0) {
+        return { isDuplicate: false };
+      }
+
+      for (const existingImage of existingImages) {
+        try {
+          const objectName = extractObjectNameFromUrl(existingImage.url);
+          const metadata = await getFileMetadata(objectName);
+
+          if (metadata && metadata.size === newFileSize) {
+            return { isDuplicate: true, existingImage };
+          }
+        } catch (error: any) {
+          console.warn(`Could not check size for ${existingImage.url}`);
+        }
+      }
+
+      return { isDuplicate: false };
+    } catch (error: any) {
+      console.error('Error checking duplicates:', error);
+      return { isDuplicate: false };
+    }
   }
 
   // Authentication routes
@@ -655,7 +686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Image routes
   /**
    * @swagger
-   * /api/projects/{projectId}/images/upload:
+   * /api/images/upload:
    *   post:
    *     summary: Upload images or a ZIP file of images to a project
    *     tags: [Images]
@@ -709,6 +740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const uploadedImages = [];
           const errors = [];
+          const duplicates = [];  // ← NUOVO
 
           // Process each file
           for (const file of files) {
@@ -727,6 +759,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 for (const extractedFile of extractedFiles) {
                   try {
+                    const fileSize = extractedFile.buffer.length;
+                    const check = await isDuplicate(extractedFile.filename, fileSize);
+
+                    if (check.isDuplicate) {
+                      console.log(`⏭️  Skipping duplicate: ${extractedFile.filename}`);
+                      duplicates.push({
+                        filename: extractedFile.filename,
+                        fileSize: fileSize,
+                        existingImageId: check.existingImage.id,
+                        reason: 'Duplicate'
+                      });
+                      continue;
+                    }
+
                     const url = await uploadFile(
                         extractedFile.buffer,
                         extractedFile.filename,
@@ -759,6 +805,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } else {
               // Upload single image
               try {
+                const fileSize = file.size;
+                const check = await isDuplicate(file.originalname, fileSize);
+
+                if (check.isDuplicate) {
+                  console.log(`Skipping duplicate: ${file.originalname}`);
+                  duplicates.push({
+                    filename: file.originalname,
+                    fileSize: fileSize,
+                    existingImageId: check.existingImage.id,
+                    reason: 'Duplicate'
+                  });
+                  continue;
+                }
+
                 const url = await uploadFile(
                     file.buffer,
                     file.originalname,
@@ -784,13 +844,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed`);
+          console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed, ${duplicates.length} duplicates`);
 
           res.json({
             success: uploadedImages.length,
             failed: errors.length,
+            duplicates: duplicates.length,
             images: uploadedImages,
             errors: errors,
+            skippedDuplicates: duplicates,
           });
         } catch (error: any) {
           console.error("Upload error:", error);
@@ -1675,7 +1737,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  
 
   // app.post('/api/annotation', authenticateToken, requireRole(['annotator']),validate(insertAnnotationSchema, { mergeData: (req) => ({ projectId: req.session.userId }) }), async (req,res) => {
   //   try {
@@ -2000,7 +2061,7 @@ app.get("/api/ML-Engineer/:id/download", authenticateToken, requireRole(["ml_eng
     const { id } = req.params;
 
     const image = await storage.getImage(id);
-    
+
     if (!image) {
       return res.status(404).json({ error: "Image not found" });
     }
@@ -2025,7 +2086,7 @@ app.get("/api/ML-Engineer/:id/download", authenticateToken, requireRole(["ml_eng
 
     fileStream.on('error', (err) => {
       console.error("Stream error:", err);
-      res.end(); 
+      res.end();
     });
 
   } catch (error: any) {
@@ -2147,7 +2208,7 @@ app.post("/api/ML-Engineer/images/labels/", authenticateToken, requireRole(["ml_
 app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
   try {
     const annotations = await storage.getEnrichedAnnotationsByImageIds([req.params.imageId]);
-    
+
     res.json({
       success: true,
       imageId: req.params.imageId,
@@ -2175,7 +2236,7 @@ app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRol
  *             schema:
  *               type: object
  *               properties:
- *                 success: 
+ *                 success:
  *                   type: boolean
  *                   example: true
  *                 data:
@@ -2183,10 +2244,10 @@ app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRol
  *                   items:
  *                     type: object
  *                     properties:
- *                       id: 
+ *                       id:
  *                         type: string
  *                         format: uuid
- *                       name: 
+ *                       name:
  *                         type: string
  *                       labelType:
  *                         $ref: '#/components/schemas/Label'
@@ -2198,7 +2259,7 @@ app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRol
 app.get("/api/ML-Engineer/projects", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
   try {
     const projectManifest = await storage.getAllProjectsWithManifest();
-    
+
     res.json({
       success: true,
       count: projectManifest.length,
