@@ -87,4 +87,30 @@ export async function getFileUrl(filename: string): Promise<string> {
     }
 }
 
+
+/**
+ * Get file metadata (including size) from MinIO
+ */
+export async function getFileMetadata(objectName: string): Promise<{ size: number } | null> {
+    try {
+        const stats = await minioClient.statObject(BUCKET_NAME, objectName);
+        return { size: stats.size };
+    } catch (error: any) {
+        if (error.code === 'NotFound') {
+            return null;
+        }
+        console.error('Error getting file metadata from MinIO:', error);
+        throw new Error('Failed to get file metadata');
+    }
+}
+
+/**
+ * Extract object name from MinIO URL
+ * Example: "http://localhost:9000/images/1234567890-image.jpg" -> "1234567890-image.jpg"
+ */
+export function extractObjectNameFromUrl(url: string): string {
+    const urlParts = url.split('/');
+    return urlParts[urlParts.length - 1];
+}
+
 export { minioClient, BUCKET_NAME };
