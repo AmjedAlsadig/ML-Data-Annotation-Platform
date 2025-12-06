@@ -94,10 +94,10 @@ export function registerAdminRoutes(app: Express) {
       const { role } = req.body;
 
       // Validate role
-      const validRoles = ['annotator', 'data_specialist', 'admin'];
+      const validRoles = ['annotator', 'data_specialist', 'admin', 'ml_engineer'];
       if (!role || !validRoles.includes(role)) {
         return res.status(400).json({ 
-          error: "Invalid role. Must be one of: annotator, data_specialist, admin" 
+          error: "Invalid role. Must be one of: annotator, data_specialist, admin, ml_engineer" 
         });
       }
 

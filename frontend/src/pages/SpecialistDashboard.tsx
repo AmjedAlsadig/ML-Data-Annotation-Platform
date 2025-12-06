@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -95,6 +95,41 @@ export default function SpecialistDashboard() {
     loadData();
   }, []);
 
+  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
+  e.stopPropagation(); // spriječi otvaranje projekta
+  if (!confirm("Are you sure you want to delete this project?")) return;
+
+  try {
+    const token = localStorage.getItem('authToken');
+
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE",
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: "include"
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      alert(data.error || "Failed to delete project");
+      return;
+    }
+
+    // Reload
+    await loadData();
+
+    toast({
+      title: "Project deleted",
+      description: "The project was successfully removed."
+    });
+
+  } catch (err) {
+    console.error(err);
+    alert("Error deleting project.");
+  }
+};
+
   const loadPortfolioStats = async () => {
     try {
       const token = localStorage.getItem('authToken');
@@ -170,16 +205,16 @@ export default function SpecialistDashboard() {
           'Authorization': `Bearer ${token}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch images: ${response.status}`);
       }
-      console.log('response: '+response)
+      console.log('response: ' + response)
       const dataRes = await response.json();
       console.log('Portfolio images response:', dataRes); // Debug log
       setPortfolioImages(dataRes);
       // const data = dataRes.data;
-      
+
       // // Handle different response structures
       // let imagesArray;
       // if (Array.isArray(data)) {
@@ -226,7 +261,7 @@ export default function SpecialistDashboard() {
       // }));
 
       // setPortfolioImages(portfolioImagesWithAssignment);
-      
+
     } catch (err) {
       console.error('Failed to fetch portfolio images:', err);
     }
@@ -276,16 +311,16 @@ export default function SpecialistDashboard() {
         },
       });
 
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch images: ${response.status}`);
       }
-      console.log('response: '+response)
+      console.log('response: ' + response)
       const data = await response.json();
       console.log('available images response:', data); // Debug log
       setAvailableImages(data);
-    
-      
+
+
     } catch (err) {
       console.error('Failed to fetch portfolio images:', err);
     }
@@ -332,7 +367,7 @@ export default function SpecialistDashboard() {
       if (projectsResponse.ok) {
         const projectsData = await projectsResponse.json();
         console.log('Projects response:', projectsData); // Debug log
-        
+
         // Handle different response structures
         let projectsArray;
         if (Array.isArray(projectsData)) {
@@ -343,7 +378,7 @@ export default function SpecialistDashboard() {
           console.warn('Unexpected projects response format:', projectsData);
           projectsArray = [];
         }
-        
+
         setProjects(projectsArray);
       }
 
@@ -451,11 +486,11 @@ export default function SpecialistDashboard() {
 
   const getUserInitials = (name: string) => {
     return name
-        .split(' ')
-        .map(n => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   const getStatusBadgeVariant = (status: string) => {
@@ -471,12 +506,12 @@ export default function SpecialistDashboard() {
 
   if (isLoading) {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
+      </div>
     );
   }
 
@@ -488,321 +523,325 @@ export default function SpecialistDashboard() {
   // const unassignedImages = availableImages.filter(img => img.assignedToProject);
 
   return (
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" className="text-primary-foreground" />
-                  <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
-                </svg>
-              </div>
-              <span className="text-lg font-semibold">VT-Annotator</span>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" className="text-primary-foreground" />
+                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
+              </svg>
             </div>
-
-            <div className="flex items-center gap-4">
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setLocation('/specialist/portfolio')}
-                  className="gap-2"
-                  data-testid="button-portfolio-nav"
-              >
-                <Image className="w-4 h-4" />
-                <span className="hidden sm:inline">Portfolio</span>
-              </Button>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground hidden sm:inline">Hello</span>
-                <span className="text-sm font-medium">{user?.name}</span>
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                    {user ? getUserInitials(user.name) : 'DS'}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  data-testid="button-logout"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+            <span className="text-lg font-semibold">VT-Annotator</span>
           </div>
-        </header>
 
-        {/* Main Content */}
-        <main className="container mx-auto px-4 py-8">
-          <div className="max-w-7xl mx-auto space-y-8">
-            {/* Welcome Section */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold mb-2">Welcome {user?.name}</h1>
-                <p className="text-muted-foreground">Manage your annotation projects and datasets</p>
-              </div>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation('/specialist/portfolio')}
+              className="gap-2"
+              data-testid="button-portfolio-nav"
+            >
+              <Image className="w-4 h-4" />
+              <span className="hidden sm:inline">Portfolio</span>
+            </Button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground hidden sm:inline">Hello</span>
+              <span className="text-sm font-medium">{user?.name}</span>
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {user ? getUserInitials(user.name) : 'DS'}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
 
-              <TabsList className="grid w-full grid-cols-3 my-6">
-                <TabsTrigger value="projects" data-testid="tab-projects">
-                  <FolderPlus className="w-4 h-4 mr-2" />
-                  Projects
-                </TabsTrigger>
-                <TabsTrigger value="portfolio" data-testid="tab-portfolio">
-                  <Image className="w-4 h-4 mr-2" />
-                  Image Portfolio
-                </TabsTrigger>
-                <TabsTrigger value="labels" data-testid="tab-labels">
-                  <Tags className="w-4 h-4 mr-2" />
-                  Label Management
-                </TabsTrigger>
-              </TabsList>
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Welcome Section */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex items-center justify-between">
+              <h1 className="text-3xl font-bold mb-2">Welcome {user?.name}</h1>
+              <p className="text-muted-foreground">Manage your annotation projects and datasets</p>
+            </div>
 
-              {/* Projects Tab Content */}
-              <TabsContent value="projects" className="space-y-8">
-                <div className="flex justify-end">
-                  <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="gap-2" data-testid="button-create-project">
-                        <FolderPlus className="w-4 h-4" />
-                        Create Project
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[800px]">
-                      <DialogHeader>
-                        <DialogTitle>Create New Project</DialogTitle>
-                        <DialogDescription>
-                          Set up a new annotation project by selecting a Label Type and assigning images from your portfolio.
-                        </DialogDescription>
-                      </DialogHeader>
+            <TabsList className="grid w-full grid-cols-3 my-6">
+              <TabsTrigger value="projects" data-testid="tab-projects">
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Projects
+              </TabsTrigger>
+              <TabsTrigger value="portfolio" data-testid="tab-portfolio">
+                <Image className="w-4 h-4 mr-2" />
+                Image Portfolio
+              </TabsTrigger>
+              <TabsTrigger value="labels" data-testid="tab-labels">
+                <Tags className="w-4 h-4 mr-2" />
+                Label Management
+              </TabsTrigger>
+            </TabsList>
 
-                      <form onSubmit={(e) => { e.preventDefault(); handleCreateProject(); }} className="space-y-6 py-4 max-h-[90vh] overflow-y-auto">
-                        {/* Project Details */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Project Details</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="project-name">Project Name</Label>
-                              <Input
-                                  id="project-name"
-                                  placeholder="e.g., Dog Breed Classification"
-                                  value={projectName}
-                                  onChange={(e) => setProjectName(e.target.value)}
-                                  disabled={isCreating}
-                                  required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="project-description">Description (optional)</Label>
-                              <Input
-                                  id="project-description"
-                                  placeholder="e.g., Dataset for identifying dog breeds"
-                                  value={projectDescription}
-                                  onChange={(e) => setProjectDescription(e.target.value)}
-                                  disabled={isCreating}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="label-type">Assign Label Type</Label>
-                              <Select
-                                  value={selectedLabelTypeId}
-                                  onValueChange={setSelectedLabelTypeId}
-                                  disabled={isCreating || labelTypes.length === 0}
-                                  required
-                              >
-                                <SelectTrigger id="label-type">
-                                  <SelectValue placeholder={labelTypes.length > 0 ? "Select a pre-defined Label Type" : "No Label Types available. Create one first."} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {labelTypes.map((type) => (
-                                      <SelectItem key={type.id} value={type.id}>
-                                        {type.name}
-                                      </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </CardContent>
-                        </Card>
+            {/* Projects Tab Content */}
+            <TabsContent value="projects" className="space-y-8">
+              <div className="flex justify-end">
+                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2" data-testid="button-create-project">
+                      <FolderPlus className="w-4 h-4" />
+                      Create Project
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Create New Project</DialogTitle>
+                      <DialogDescription>
+                        Set up a new annotation project by selecting a Label Type and assigning images from your portfolio.
+                      </DialogDescription>
+                    </DialogHeader>
 
-                        {/* Image Selection */}
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Select Images to Assign</CardTitle>
-                            <CardDescription>
-                              Select unassigned images from your portfolio. ({selectedImageIds.length} selected)
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            {availableImages.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                  No unassigned images in your portfolio. Upload some first!
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-4 gap-4 max-h-64 overflow-y-auto p-2 border rounded-md">
-                                  {availableImages.map((image) => (
-                                      <div
-                                          key={image.id}
-                                          className={`relative aspect-square cursor-pointer border-2 rounded-md overflow-hidden transition-all ${
-                                              selectedImageIds.includes(image.id)
-                                                  ? 'border-primary ring-2 ring-primary'
-                                                  : 'border-transparent hover:border-muted-foreground/50'
-                                          }`}
-                                          onClick={() => handleImageSelection(image.id)}
-                                      >
-                                        <img
-                                            src={image.url}
-                                            alt={image.filename}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        {selectedImageIds.includes(image.id) && (
-                                            <div className="absolute inset-0 bg-primary/50 flex items-center justify-center">
-                                              <CheckCircle2 className="w-8 h-8 text-primary-foreground" />
-                                            </div>
-                                        )}
-                                      </div>
-                                  ))}
-                                </div>
-                            )}
-                          </CardContent>
-                        </Card>
-
-                        <DialogFooter>
-                          <Button type="submit" disabled={isCreating} data-testid="button-submit-create-project">
-                            {isCreating ? 'Creating...' : 'Create Project'}
-                          </Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-
-                {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardDescription className="text-sm font-medium">Total Projects</CardDescription>
-                        <FolderPlus className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{projects.length}</div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardDescription className="text-sm font-medium">Total Images</CardDescription>
-                        <Image className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{totalImages}</div>
-                      <Button
-                          variant="ghost"
-                          className="p-0 h-auto text-xs"
-                          onClick={() => setActiveTab('portfolio')}
-                          data-testid="link-view-portfolio"
-                      >
-                        View Portfolio
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardDescription className="text-sm font-medium">Annotation Progress</CardDescription>
-                        <Tags className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{annotationProgress}%</div>
-                      <div className="text-sm text-muted-foreground">
-                        {annotatedImages} of {totalImages} images annotated
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Project List */}
-                <div className="space-y-4">
-                  <h3 className="text-xl font-semibold">Project List</h3>
-                  {projects.length === 0 ? (
-                      <Card className="p-12 text-center">
-                        <CardContent>
-                          <p className="text-muted-foreground">No projects created yet. Click "Create Project" to start.</p>
+                    <form onSubmit={(e) => { e.preventDefault(); handleCreateProject(); }} className="space-y-6 py-4 max-h-[90vh] overflow-y-auto">
+                      {/* Project Details */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Project Details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="project-name">Project Name</Label>
+                            <Input
+                              id="project-name"
+                              placeholder="e.g., Dog Breed Classification"
+                              value={projectName}
+                              onChange={(e) => setProjectName(e.target.value)}
+                              disabled={isCreating}
+                              required
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="project-description">Description (optional)</Label>
+                            <Input
+                              id="project-description"
+                              placeholder="e.g., Dataset for identifying dog breeds"
+                              value={projectDescription}
+                              onChange={(e) => setProjectDescription(e.target.value)}
+                              disabled={isCreating}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="label-type">Assign Label Type</Label>
+                            <Select
+                              value={selectedLabelTypeId}
+                              onValueChange={setSelectedLabelTypeId}
+                              disabled={isCreating || labelTypes.length === 0}
+                              required
+                            >
+                              <SelectTrigger id="label-type">
+                                <SelectValue placeholder={labelTypes.length > 0 ? "Select a pre-defined Label Type" : "No Label Types available. Create one first."} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {labelTypes.map((type) => (
+                                  <SelectItem key={type.id} value={type.id}>
+                                    {type.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </CardContent>
                       </Card>
-                  ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {projects.map((project) => {
-                          let projectProgress; 
-                          if(project.numberOfImages>0){
-                            projectProgress = ((project.annotatedImages / project.numberOfImages )* 100) ; // Mock value - you can replace with actual stat
-                          }else{
-                            projectProgress = 0;
-                          }
 
-                          return (
-                              <Card key={project.id} className="hover-elevate cursor-pointer" onClick={() => setLocation(`/specialist/projects/${project.id}`)} data-testid={`card-project-${project.id}`}>
-                                <CardHeader className="space-y-1">
-                                  <div className="flex justify-between items-center">
-                                    <CardTitle className="text-xl">{project.name}</CardTitle>
-                                    <Badge variant={getStatusBadgeVariant(project.status)}>{
-                                      projectProgress === 100 ? 'Completed' : (projectProgress > 0 ? "In Progress" : 'Not Started')
-                                      }</Badge>
-                                  </div>
-                                  <CardDescription>
-                                    Created: {new Date(project.createdAt).toLocaleDateString()}
-                                  </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                  <div className="text-sm text-muted-foreground">
-                                    {project.description || 'No description'}
-                                  </div>
-                                  <div className="flex items-center justify-between text-sm">
-                                    <span>Progress:</span>
-                                    <span className="font-medium">{projectProgress}%</span>
-                                  </div>
-                                  <div className="h-2 bg-muted rounded-full">
-                                    <div className="h-full bg-primary rounded-full" style={{ width: `${projectProgress}%` }}></div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                          );
-                        })}
-                      </div>
-                  )}
-                </div>
-              </TabsContent>
+                      {/* Image Selection */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Select Images to Assign</CardTitle>
+                          <CardDescription>
+                            Select unassigned images from your portfolio. ({selectedImageIds.length} selected)
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {availableImages.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                              No unassigned images in your portfolio. Upload some first!
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 gap-4 max-h-64 overflow-y-auto p-2 border rounded-md">
+                              {availableImages.map((image) => (
+                                <div
+                                  key={image.id}
+                                  className={`relative aspect-square cursor-pointer border-2 rounded-md overflow-hidden transition-all ${selectedImageIds.includes(image.id)
+                                      ? 'border-primary ring-2 ring-primary'
+                                      : 'border-transparent hover:border-muted-foreground/50'
+                                    }`}
+                                  onClick={() => handleImageSelection(image.id)}
+                                >
+                                  <img
+                                    src={image.url}
+                                    alt={image.filename}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {selectedImageIds.includes(image.id) && (
+                                    <div className="absolute inset-0 bg-primary/50 flex items-center justify-center">
+                                      <CheckCircle2 className="w-8 h-8 text-primary-foreground" />
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
 
-              {/* Portfolio Tab Content */}
-              <TabsContent value="portfolio" className="space-y-8">
-                <PortfolioUpload onUploadSuccess={loadData} />
-                <div className="mt-8">
-                  <Button
-                      variant="outline"
-                      onClick={() => setLocation('/specialist/portfolio')}
-                      data-testid="button-view-full-portfolio"
-                  >
-                    View Full Image Portfolio
-                  </Button>
-                </div>
-              </TabsContent>
+                      <DialogFooter>
+                        <Button type="submit" disabled={isCreating} data-testid="button-submit-create-project">
+                          {isCreating ? 'Creating...' : 'Create Project'}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
 
-              {/* Label Management Tab Content */}
-              <TabsContent value="labels" className="space-y-8">
-                <LabelManager labelTypes={labelTypes} onLabelTypeChange={fetchLabelTypes} />
-              </TabsContent>
-            </Tabs>
-          </div>
-        </main>
-      </div>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardDescription className="text-sm font-medium">Total Projects</CardDescription>
+                      <FolderPlus className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{projects.length}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardDescription className="text-sm font-medium">Total Images</CardDescription>
+                      <Image className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{totalImages}</div>
+                    <Button
+                      variant="ghost"
+                      className="p-0 h-auto text-xs"
+                      onClick={() => setActiveTab('portfolio')}
+                      data-testid="link-view-portfolio"
+                    >
+                      View Portfolio
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardDescription className="text-sm font-medium">Annotation Progress</CardDescription>
+                      <Tags className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{annotationProgress}%</div>
+                    <div className="text-sm text-muted-foreground">
+                      {annotatedImages} of {totalImages} images annotated
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Project List */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">Project List</h3>
+                {projects.length === 0 ? (
+                  <Card className="p-12 text-center">
+                    <CardContent>
+                      <p className="text-muted-foreground">No projects created yet. Click "Create Project" to start.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {projects.map((project) => {
+                      let projectProgress;
+                      if (project.numberOfImages > 0) {
+                        projectProgress = ((project.annotatedImages / project.numberOfImages) * 100); // Mock value - you can replace with actual stat
+                      } else {
+                        projectProgress = 0;
+                      }
+
+                      return (
+                        <Card key={project.id} className="hover-elevate cursor-pointer" onClick={() => setLocation(`/specialist/projects/${project.id}`)} data-testid={`card-project-${project.id}`}>
+                          <CardHeader className="space-y-1">
+                            <div className="flex justify-between items-center">
+                              <CardTitle className="text-xl">{project.name}</CardTitle>
+                              <Badge variant={getStatusBadgeVariant(project.status)}>{
+                                projectProgress === 100 ? 'Completed' : (projectProgress > 0 ? "In Progress" : 'Not Started')
+                              }</Badge>
+                            </div>
+                            <CardDescription>
+                              Created: {new Date(project.createdAt).toLocaleDateString()}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="text-sm text-muted-foreground">
+                              {project.description || 'No description'}
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span>Progress:</span>
+                              <span className="font-medium">{projectProgress}%</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full">
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${projectProgress}%` }}></div>
+                            </div>
+                          </CardContent>
+                          <CardFooter className="flex justify-end">
+                            <Button variant="destructive" size="sm" onClick={(e) => handleDeleteProject(project.id, e)} >
+                              Delete
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Portfolio Tab Content */}
+            <TabsContent value="portfolio" className="space-y-8">
+              <PortfolioUpload onUploadSuccess={loadData} />
+              <div className="mt-8">
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation('/specialist/portfolio')}
+                  data-testid="button-view-full-portfolio"
+                >
+                  View Full Image Portfolio
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* Label Management Tab Content */}
+            <TabsContent value="labels" className="space-y-8">
+              <LabelManager labelTypes={labelTypes} onLabelTypeChange={fetchLabelTypes} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </main>
+    </div>
   );
 }
