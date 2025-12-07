@@ -11,6 +11,14 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, count, inArray } from "drizzle-orm";
 
+export interface AnnotationDetailsDTO {
+  id: string;
+  projectName: string | null;
+  labelTypeName: string | null;
+  labelClassName: string | null;
+  annotatorName: string | null;
+}
+
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
@@ -82,7 +90,7 @@ export interface IStorage {
   // }>;
 
   // Annotation methods
-  getAnnotationsByImage(imageId: string): Promise<Annotation[]>;
+  getAnnotationsByImage(imageId: string): Promise<AnnotationDetailsDTO[]>;
   getAnnotationsByUser(userId: string): Promise<Annotation[]>;
   // createAnnotation(annotation: InsertAnnotation): Promise<Annotation>;
 
@@ -336,9 +344,21 @@ export class DbStorage implements IStorage {
   }
 
   // Annotation methods
-  async getAnnotationsByImage(imageId: string): Promise<Annotation[]> {
-    return await db.select().from(annotations).where(eq(annotations.imageId, imageId));
-  }
+  async getAnnotationsByImage(imageId: string): Promise<AnnotationDetailsDTO[]> {
+ return await db
+    .select({
+      id: annotations.id,
+      projectName: projects.name,
+      labelTypeName: labels.name,
+      labelClassName: labelClasses.name,
+      annotatorName: users.name,
+    })
+    .from(annotations)
+    .leftJoin(projects, eq(projects.id, annotations.projectId))
+    .leftJoin(labels, eq(labels.id, annotations.labelId))
+    .leftJoin(labelClasses, eq(labelClasses.id, annotations.labelClassesId))
+    .leftJoin(users, eq(users.id, annotations.userId))
+    .where(eq(annotations.imageId, imageId));  }
 
   async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
     return await db.select().from(annotations).where(eq(annotations.userId, userId));
