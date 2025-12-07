@@ -23,6 +23,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "frontend", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@backend": path.resolve(import.meta.dirname, "backend"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
@@ -44,3 +45,4 @@ export default defineConfig({
     },
   },
 });
+
