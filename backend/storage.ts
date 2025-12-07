@@ -579,26 +579,41 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
     // Build the base query for images with project and annotation data
     // Images are now linked via projectImages table instead of direct projectId
 
-    const query = db
-      .select({
-        id: images.id,
-        projectId: projectImages.projectId,
-        filename: images.filename,
-        url: images.url,
-        uploadedAt: images.uploadedAt,
-        projectName: projects.name,
-        isAnnotated: sql<boolean>`CASE WHEN ${annotations.id} IS NOT NULL THEN true ELSE false END`
-      })
-      .from(images)
-      .innerJoin(projectImages, eq(images.id,projectImages.imageId))
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
-      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId,annotations.projectId)))
-      .where(
-        and(
-          eq(projects.createdBy, userId),
-          projectId ? eq(projects.id, projectId) : undefined
-        )
-      );
+const query = db
+  .select({
+    id: images.id,
+    projectId: projectImages.projectId,
+    filename: images.filename,
+    url: images.url,
+    uploadedAt: images.uploadedAt,
+    projectName: projects.name,
+    isAnnotated: sql<boolean>`CASE WHEN COUNT(${annotations.id}) > 0 THEN true ELSE false END`
+  })
+  .from(images)
+  .innerJoin(projectImages, eq(images.id, projectImages.imageId))
+  .innerJoin(projects, eq(projectImages.projectId, projects.id))
+  .leftJoin(
+    annotations,
+    and(
+      eq(images.id, annotations.imageId),
+      eq(projectImages.projectId, annotations.projectId)
+    )
+  )
+  .where(
+    and(
+      eq(projects.createdBy, userId),
+      projectId ? eq(projects.id, projectId) : undefined
+    )
+  )
+  .groupBy(
+    images.id,
+    projectImages.projectId,
+    images.filename,
+    images.url,
+    images.uploadedAt,
+    projects.name
+  );
+
 
     // Apply ordering
     const orderBy = sortOrder === 'asc' ? asc : desc;

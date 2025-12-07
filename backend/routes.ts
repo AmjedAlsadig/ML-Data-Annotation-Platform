@@ -9,6 +9,10 @@ import { extractImagesFromZip } from './services/zip';
 
 import jwt from "jsonwebtoken";
 
+import { annotations as annotationsTable, images, projects, labels, labelClasses, users } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { db } from "./db"; 
+
 import { authenticateToken, requireRole } from "./middlewares/authorize";
 import { validate } from "./middlewares/validation";
 // Create partial schemas for updates
