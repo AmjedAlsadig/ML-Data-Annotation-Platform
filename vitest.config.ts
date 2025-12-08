@@ -3,6 +3,12 @@ import path from "path";
 
 export default defineConfig({
   test: {
+
+     coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],   // see coverage summary and HTML report
+      reportsDirectory: "./coverage"
+    },
     globals: true,
     environment: "jsdom", 
   },
