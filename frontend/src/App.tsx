@@ -13,6 +13,7 @@ import ProjectDetails from "@/pages/ProjectDetails";
 import ImagePortfolio from "@/pages/ImagePortfolio";
 import CreateAccount from "@/pages/CreateAccount";
 import AssignRole from "@/pages/AssignRole";
+import ImageDetails from "@/pages/ImageDetails";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/specialist/dashboard" component={SpecialistDashboard} />
       <Route path="/specialist/portfolio" component={ImagePortfolio} />
       <Route path="/specialist/projects/:id" component={ProjectDetails} />
+      <Route path="/specialist/images/:id" component={ImageDetails} />
       <Route path="/admin/create-account" component={CreateAccount} />
       <Route path="/admin/assign-role" component={AssignRole} />
       <Route path="/admin/dashboard" component={() => <Redirect to="/admin/assign-role" />} />

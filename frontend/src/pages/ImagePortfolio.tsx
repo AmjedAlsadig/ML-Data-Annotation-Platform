@@ -31,6 +31,7 @@ export default function ImagePortfolio() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
+  const [images, setImages] = useState<any[]>([]);
 
   const {
     data,
@@ -44,6 +45,22 @@ export default function ImagePortfolio() {
 
   useEffect(() => {
     loadUserData();
+
+    const fetchImages = async () => {
+      try{
+
+        const res = await fetch('/api/images');
+        const imagesData = await res.json();
+        setImages(imagesData);
+      }catch(err){
+        toast({
+          title: 'Error',
+          description: 'Failed to load user data.',
+          variant: 'destructive',
+        });
+      }
+    }
+    fetchImages();  
   }, []);
 
   const loadUserData = async () => {
@@ -78,6 +95,22 @@ export default function ImagePortfolio() {
 
       setUser(userData);
 
+      try{      
+        const res = await fetch('/api/images', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }, 
+        });
+        const imagesData = await res.json();
+        setImages(imagesData);
+      }catch(err){
+        toast({
+          title: 'Error',
+          description: 'Failed to load user data.',
+          variant: 'destructive',
+        });
+      }
+    
       // Fetch projects for filter dropdown
       const projectsResponse = await fetch('/api/projects', {
         headers: {
@@ -264,7 +297,7 @@ export default function ImagePortfolio() {
           )}
 
           {/* Filter Controls */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          {/* <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-muted-foreground" />
@@ -310,11 +343,11 @@ export default function ImagePortfolio() {
             <Badge variant="outline" className="text-sm">
               {data?.total || 0} total images
             </Badge>
-          </div>
+          </div> */}
 
           {/* Gallery Section */}
           <div className="space-y-4">
-            {data?.images.length === 0 ? (
+            {images.length === 0 ? (
               <Card className="p-12 text-center">
                 <CardContent>
                   <ImageIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -326,7 +359,7 @@ export default function ImagePortfolio() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {data?.images.map((image) => (
+                {images.map((image) => (
                   <PortfolioImageCard
                     key={image.id}
                     image={image}

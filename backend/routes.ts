@@ -9,6 +9,10 @@ import { extractImagesFromZip } from './services/zip';
 
 import jwt from "jsonwebtoken";
 
+import { annotations as annotationsTable, images, projects, labels, labelClasses, users } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { db } from "./db"; 
+
 import { authenticateToken, requireRole } from "./middlewares/authorize";
 import { validate } from "./middlewares/validation";
 // Create partial schemas for updates
@@ -1013,6 +1017,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/images/:id", authenticateToken, async (req, res) => {
+  try {
+    const image = await storage.getImage(req.params.id);
+    if (!image) return res.status(404).json({ error: "Image not found" });
+
+    res.json({ success: true, data: image });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch image" });
+  }
+});
+
   // Label routes
   /**
    * @swagger
@@ -1660,6 +1675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  
 
   // app.post('/api/annotation', authenticateToken, requireRole(['annotator']),validate(insertAnnotationSchema, { mergeData: (req) => ({ projectId: req.session.userId }) }), async (req,res) => {
   //   try {

@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { X, ExternalLink } from 'lucide-react';
+import { Link } from 'wouter';
 
 interface PortfolioImage {
   id: string;
@@ -38,7 +39,7 @@ export function PortfolioImageCard({
     }
   };
 
-  return (
+  return (<Link href={`/specialist/images/${id}`}>
     <Card data-testid={`card-portfolio-image-${id}`}>
       <CardContent className="p-4">
         <div className="relative group">
@@ -47,7 +48,7 @@ export function PortfolioImageCard({
             alt={filename}
             className="w-full h-48 object-cover rounded-lg mb-2"
           />
-          {onDelete && (
+          {/* {onDelete && (
             <Button
               variant="destructive"
               size="sm"
@@ -57,13 +58,13 @@ export function PortfolioImageCard({
             >
               <X className="w-4 h-4" />
             </Button>
-          )}
+          )} */}
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium truncate" title={filename}>
             {filename}
           </p>
-          <div className="flex items-center justify-between">
+          {/* <div className="flex items-center justify-between">
             <button
               className="text-xs text-primary hover:underline flex items-center gap-1"
               onClick={handleProjectClick}
@@ -82,9 +83,10 @@ export function PortfolioImageCard({
           </div>
           <p className="text-xs text-muted-foreground">
             {new Date(uploadedAt).toLocaleDateString()}
-          </p>
+          </p> */}
         </div>
       </CardContent>
     </Card>
+    </Link>
   );
 }
