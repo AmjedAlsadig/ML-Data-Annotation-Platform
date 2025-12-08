@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { insertUserSchema, insertProjectSchema, insertLabelSchema, insertImageSchema, insertProjectImagesSchema, insertAnnotationSchema, insertLabelClassSchema, insertProjectImageSchema } from "@shared/schema";
 import multer from 'multer';
-import { uploadFile, deleteFile, initializeMinio, getFileMetadata, extractObjectNameFromUrl } from './services/minio';
+import { uploadFile, deleteFile, initializeMinio, getFileStream } from './services/minio';
 import { extractImagesFromZip } from './services/zip';
 
 import jwt from "jsonwebtoken";
@@ -42,37 +42,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('MinIO initialized successfully');
   } catch (error) {
     console.error('Failed to initialize MinIO:', error);
-  }
-
-  /**
-   * Check if file is duplicate by comparing with existing files in MinIO
-   */
-  async function isDuplicate(filename: string, newFileSize: number): Promise<{ isDuplicate: boolean; existingImage?: any }> {
-    try {
-      const existingImages = await storage.getImagesByFilename(filename);
-
-      if (existingImages.length === 0) {
-        return { isDuplicate: false };
-      }
-
-      for (const existingImage of existingImages) {
-        try {
-          const objectName = extractObjectNameFromUrl(existingImage.url);
-          const metadata = await getFileMetadata(objectName);
-
-          if (metadata && metadata.size === newFileSize) {
-            return { isDuplicate: true, existingImage };
-          }
-        } catch (error: any) {
-          console.warn(`Could not check size for ${existingImage.url}`);
-        }
-      }
-
-      return { isDuplicate: false };
-    } catch (error: any) {
-      console.error('Error checking duplicates:', error);
-      return { isDuplicate: false };
-    }
   }
 
   // Authentication routes
@@ -682,11 +651,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Image routes
   /**
    * @swagger
-   * /api/images/upload:
+   * /api/projects/{projectId}/images/upload:
    *   post:
-   *     summary: Upload images or a ZIP file of images (with duplicate detection)
-   *     description: Upload single images or ZIP files containing multiple images. Automatically detects and skips duplicates based on filename and file size.
+   *     summary: Upload images or a ZIP file of images to a project
    *     tags: [Images]
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         schema:
+   *           type: string
+   *         required: true
+   *         description: The project ID
    *     requestBody:
    *       required: true
    *       content:
@@ -699,61 +674,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
    *                 items:
    *                   type: string
    *                   format: binary
-   *                 description: One or more image files or ZIP archives
    *     responses:
    *       200:
-   *         description: Upload completed with success/failure/duplicate counts
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 success:
-   *                   type: integer
-   *                   description: Number of successfully uploaded images
-   *                   example: 3
-   *                 failed:
-   *                   type: integer
-   *                   description: Number of failed uploads
-   *                   example: 0
-   *                 duplicates:
-   *                   type: integer
-   *                   description: Number of skipped duplicate images
-   *                   example: 2
-   *                 images:
-   *                   type: array
-   *                   description: Array of successfully uploaded images
-   *                   items:
-   *                     type: object
-   *                 errors:
-   *                   type: array
-   *                   description: Array of upload errors
-   *                   items:
-   *                     type: object
-   *                 skippedDuplicates:
-   *                   type: array
-   *                   description: Details of skipped duplicate files
-   *                   items:
-   *                     type: object
-   *                     properties:
-   *                       filename:
-   *                         type: string
-   *                         example: "image.jpg"
-   *                       fileSize:
-   *                         type: integer
-   *                         example: 524288
-   *                       existingImageId:
-   *                         type: string
-   *                         example: "abc-123-def"
-   *                       reason:
-   *                         type: string
-   *                         example: "Duplicate"
+   *         description: The images were successfully uploaded
    *       400:
-   *         description: Bad request (no files uploaded or invalid file type)
+   *         description: Bad request
    *       401:
-   *         description: Not authenticated
-   *       500:
-   *         description: Server error during upload
+   *         description: Unauthorized
    */
   // Universal upload endpoint (images + ZIP) - SINGLE ENDPOINT FOR ALL UPLOADS
   app.post("/api/images/upload",
@@ -763,7 +690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('Headers:', req.headers);
           console.log('Content-Type:', req.headers['content-type']);
           console.log('Files received:', req.files);
-
+          
           const userId = req.session?.userId;
           if (!userId) {
             return res.status(401).json({ error: "Not authenticated" });
@@ -778,14 +705,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const uploadedImages = [];
           const errors = [];
-          const duplicates = [];  // ← NUOVO
 
+          // Process each file
           for (const file of files) {
+            // Check if it's a ZIP file
             const isZip = file.mimetype === 'application/zip' ||
                 file.mimetype === 'application/x-zip-compressed' ||
                 file.originalname.toLowerCase().endsWith('.zip');
 
             if (isZip) {
+              // Extract and upload images from ZIP
               console.log(`Extracting ZIP: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
               try {
@@ -794,20 +723,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 for (const extractedFile of extractedFiles) {
                   try {
-                    const fileSize = extractedFile.buffer.length;
-                    const check = await isDuplicate(extractedFile.filename, fileSize);
-
-                    if (check.isDuplicate) {
-                      console.log(`⏭️  Skipping duplicate: ${extractedFile.filename}`);
-                      duplicates.push({
-                        filename: extractedFile.filename,
-                        fileSize: fileSize,
-                        existingImageId: check.existingImage.id,
-                        reason: 'Duplicate'
-                      });
-                      continue;
-                    }
-
                     const url = await uploadFile(
                         extractedFile.buffer,
                         extractedFile.filename,
@@ -815,6 +730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     );
 
                     const image = await storage.createImage({
+                      // projectId: req.params.projectId,
                       filename: extractedFile.filename,
                       url: url,
                     });
@@ -837,32 +753,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
             } else {
-              // Single image
+              // Upload single image
               try {
-                const fileSize = file.size;
-                const check = await isDuplicate(file.originalname, fileSize);
-
-                if (check.isDuplicate) {
-                  console.log(`Skipping duplicate: ${file.originalname}`);
-                  duplicates.push({
-                    filename: file.originalname,
-                    fileSize: fileSize,
-                    existingImageId: check.existingImage.id,
-                    reason: 'Duplicate'
-                  });
-                  continue;
-                }
-
                 const url = await uploadFile(
                     file.buffer,
                     file.originalname,
                     file.mimetype
                 );
-
                 console.log(file.originalname)
                 console.log(url)
-
                 const image = await storage.createImage({
+                  // projectId: req.params.projectId,
                   filename: file.originalname,
                   url: url,
                 });
@@ -879,15 +780,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed, ${duplicates.length} duplicates`);
+          console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed`);
 
           res.json({
             success: uploadedImages.length,
             failed: errors.length,
-            duplicates: duplicates.length,
             images: uploadedImages,
             errors: errors,
-            skippedDuplicates: duplicates,
           });
         } catch (error: any) {
           console.error("Upload error:", error);
@@ -895,6 +794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
   );
+
   /**
    * @swagger
    * /api/projects/{projectId}/images:

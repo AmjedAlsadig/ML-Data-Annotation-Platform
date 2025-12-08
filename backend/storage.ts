@@ -72,7 +72,6 @@ export interface IStorage {
   createImage(image: InsertImage): Promise<Image>;
   deleteImage(id: string): Promise<void>;
   getAllImages(): Promise<Image[] | undefined>
-  getImagesByFilename(filename: string): Promise<Image[]>;
 
   // getPortfolioImages(userId: string, filters?: {
   //   projectId?: string;
@@ -347,13 +346,6 @@ export class DbStorage implements IStorage {
   async getAllImages(): Promise<Image[] | undefined> {
     const image = await db.select().from(images);
     return image;
-  }
-
-  async getImagesByFilename(filename: string): Promise<Image[]> {
-    return await db
-        .select()
-        .from(images)
-        .where(eq(images.filename, filename));
   }
 
   // Annotation methods
