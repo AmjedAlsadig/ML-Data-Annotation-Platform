@@ -24,8 +24,8 @@ const uploadUniversal = multer({
     // Accept images and ZIP files
     const isImage = file.mimetype.startsWith('image/');
     const isZip = file.mimetype === 'application/zip' ||
-        file.mimetype === 'application/x-zip-compressed' ||
-        file.originalname.toLowerCase().endsWith('.zip');
+      file.mimetype === 'application/x-zip-compressed' ||
+      file.originalname.toLowerCase().endsWith('.zip');
 
     if (!isImage && !isZip) {
       cb(new Error('Only image and ZIP files are allowed'));
@@ -70,7 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", async (req, res) => {
     try {
       const data = insertUserSchema.parse(req.body);
-      const role = data.role? data.role: 'annotator';
+      const role = data.role ? data.role : 'annotator';
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(data.email);
       if (existingUser) {
@@ -150,21 +150,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.session.userId = user.id;
       }
 
-      
+
       // Generate JWT token
       const token = jwt.sign(
-      { 
-        id: user.id, 
-        role: user.role,
-        email: user.email 
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: '24h' }
-    );
+        {
+          id: user.id,
+          role: user.role,
+          email: user.email
+        },
+        process.env.JWT_SECRET!,
+        { expiresIn: '24h' }
+      );
 
       // Don't send password back
       const { password: _, ...userWithoutPassword } = user;
-      res.json({user: userWithoutPassword, token});
+      res.json({ user: userWithoutPassword, token });
     } catch (error: any) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
@@ -266,8 +266,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Filter to only return annotators and remove passwords
       const annotators = users
-          .filter(u => u.role === 'annotator')
-          .map(({ password, ...user }) => user);
+        .filter(u => u.role === 'annotator')
+        .map(({ password, ...user }) => user);
 
       res.json(annotators);
     } catch (error: any) {
@@ -455,7 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *         description: Server error
  */
 
-  app.post("/api/projects/:id/images", authenticateToken, requireRole(["data_specialist"]), async (req,res) => {
+  app.post("/api/projects/:id/images", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
     try {
       const projectId = req.params.id;
       const { imageIds } = req.body;
@@ -500,10 +500,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-    app.delete("/api/projects/:id/images/:imageId", authenticateToken, requireRole(["data_specialist"]), async (req,res) => {
+  app.delete("/api/projects/:id/images/:imageId", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
     try {
       const projectId = req.params.id;
-      const imageId  = req.params.imageId;
+      const imageId = req.params.imageId;
 
       // Verify project exists
       const project = await storage.getProject(projectId);
@@ -528,8 +528,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      console.log(`[Reomve Image assingment: imageId: ${imageId} projectId: ${projectId}`)
-      // Assign images to project
+      // Check if image is published
+      const isPublished = await storage.getProjectImagePublishedState(projectId, imageId);
+      if (isPublished) {
+        return res.status(400).json({
+          success: false,
+          error: "Cannot delete a published image. Please unpublish it first."
+        });
+      }
+
+      console.log(`[Remove Image assignment: imageId: ${imageId} projectId: ${projectId}`)
+      // Remove image assignment
       const assignedImages = await storage.removeImageAssignment(projectId, imageId);
 
       res.status(201).json({
@@ -542,6 +551,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         error: "Failed to assign images to project"
+      });
+    }
+  });
+
+  /**
+   * @swagger
+   * /api/projects/{id}/images/{imageId}/publish:
+   *   patch:
+   *     summary: Toggle published state of an image in a project
+   *     tags: [Projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Project ID
+   *       - in: path
+   *         name: imageId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Image ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               published:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Published state updated successfully
+   *       403:
+   *         description: Access denied
+   *       404:
+   *         description: Project or image not found
+   */
+  app.patch("/api/projects/:id/images/:imageId/publish", authenticateToken, requireRole(["annotator", "data_specialist"]), async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const imageId = req.params.imageId;
+      const { published } = req.body;
+
+      if (typeof published !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          error: "Published field must be a boolean"
+        });
+      }
+
+      // Verify project exists
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          error: "Project not found"
+        });
+      }
+
+      const userId = (req as any).user.id;
+      const userRole = (req as any).user.role;
+
+      // Annotators can only publish (not unpublish) and only for projects they're assigned to
+      if (userRole === 'annotator') {
+        // Check if user is assigned to this project
+        const assignments = await storage.getProjectAssignments(projectId);
+        const isAssigned = assignments.some(a => a.userId === userId);
+
+        if (!isAssigned) {
+          return res.status(403).json({
+            success: false,
+            error: "You are not assigned to this project"
+          });
+        }
+
+        // Annotators can only publish, not unpublish
+        if (!published) {
+          return res.status(403).json({
+            success: false,
+            error: "Annotators can only publish images, not unpublish them"
+          });
+        }
+      } else if (userRole === 'data_specialist') {
+        // Data specialists can only modify their own projects
+        if (project.createdBy !== userId) {
+          return res.status(403).json({
+            success: false,
+            error: "You can only modify images in your own projects"
+          });
+        }
+      }
+
+      // Update published state
+      const updatedProjectImage = await storage.updateProjectImagePublishedState(projectId, imageId, published);
+
+      res.json({
+        success: true,
+        data: updatedProjectImage,
+        message: `Image ${published ? 'published' : 'unpublished'} successfully`
+      });
+    } catch (error: any) {
+      console.error("Toggle published state error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "Failed to update published state"
       });
     }
   });
@@ -596,7 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  
+
 
   /**
    * @swagger
@@ -628,13 +747,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get user details for each assignment
       const assignmentsWithUsers = await Promise.all(
-          assignments.map(async (assignment) => {
-            const user = await storage.getUser(assignment.userId);
-            return {
-              ...assignment,
-              user: user ? { id: user.id, name: user.name, email: user.email } : null,
-            };
-          })
+        assignments.map(async (assignment) => {
+          const user = await storage.getUser(assignment.userId);
+          return {
+            ...assignment,
+            user: user ? { id: user.id, name: user.name, email: user.email } : null,
+          };
+        })
       );
 
       res.json(assignmentsWithUsers);
@@ -684,115 +803,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   // Universal upload endpoint (images + ZIP) - SINGLE ENDPOINT FOR ALL UPLOADS
   app.post("/api/images/upload",
-      uploadUniversal.array('images', 50),
-      async (req, res) => {
-        try {
-          console.log('Headers:', req.headers);
-          console.log('Content-Type:', req.headers['content-type']);
-          console.log('Files received:', req.files);
-          
-          const userId = req.session?.userId;
-          if (!userId) {
-            return res.status(401).json({ error: "Not authenticated" });
-          }
+    uploadUniversal.array('images', 50),
+    async (req, res) => {
+      try {
+        console.log('Headers:', req.headers);
+        console.log('Content-Type:', req.headers['content-type']);
+        console.log('Files received:', req.files);
 
-          const files = req.files as Express.Multer.File[];
-          if (!files || files.length === 0) {
-            return res.status(400).json({ error: "No files uploaded" });
-          }
+        const userId = req.session?.userId;
+        if (!userId) {
+          return res.status(401).json({ error: "Not authenticated" });
+        }
 
-          console.log(`Processing ${files.length} file(s)`);
+        const files = req.files as Express.Multer.File[];
+        if (!files || files.length === 0) {
+          return res.status(400).json({ error: "No files uploaded" });
+        }
 
-          const uploadedImages = [];
-          const errors = [];
+        console.log(`Processing ${files.length} file(s)`);
 
-          // Process each file
-          for (const file of files) {
-            // Check if it's a ZIP file
-            const isZip = file.mimetype === 'application/zip' ||
-                file.mimetype === 'application/x-zip-compressed' ||
-                file.originalname.toLowerCase().endsWith('.zip');
+        const uploadedImages = [];
+        const errors = [];
 
-            if (isZip) {
-              // Extract and upload images from ZIP
-              console.log(`Extracting ZIP: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        // Process each file
+        for (const file of files) {
+          // Check if it's a ZIP file
+          const isZip = file.mimetype === 'application/zip' ||
+            file.mimetype === 'application/x-zip-compressed' ||
+            file.originalname.toLowerCase().endsWith('.zip');
 
-              try {
-                const extractedFiles = extractImagesFromZip(file.buffer);
-                console.log(`Found ${extractedFiles.length} images in ZIP`);
+          if (isZip) {
+            // Extract and upload images from ZIP
+            console.log(`Extracting ZIP: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-                for (const extractedFile of extractedFiles) {
-                  try {
-                    const url = await uploadFile(
-                        extractedFile.buffer,
-                        extractedFile.filename,
-                        extractedFile.mimetype
-                    );
+            try {
+              const extractedFiles = extractImagesFromZip(file.buffer);
+              console.log(`Found ${extractedFiles.length} images in ZIP`);
 
-                    const image = await storage.createImage({
-                      // projectId: req.params.projectId,
-                      filename: extractedFile.filename,
-                      url: url,
-                    });
+              for (const extractedFile of extractedFiles) {
+                try {
+                  const url = await uploadFile(
+                    extractedFile.buffer,
+                    extractedFile.filename,
+                    extractedFile.mimetype
+                  );
 
-                    uploadedImages.push(image);
-                    console.log(`Uploaded from ZIP: ${extractedFile.filename}`);
-                  } catch (error: any) {
-                    console.error(`Failed: ${extractedFile.filename}:`, error.message);
-                    errors.push({
-                      filename: extractedFile.filename,
-                      error: error.message,
-                    });
-                  }
+                  const image = await storage.createImage({
+                    // projectId: req.params.projectId,
+                    filename: extractedFile.filename,
+                    url: url,
+                  });
+
+                  uploadedImages.push(image);
+                  console.log(`Uploaded from ZIP: ${extractedFile.filename}`);
+                } catch (error: any) {
+                  console.error(`Failed: ${extractedFile.filename}:`, error.message);
+                  errors.push({
+                    filename: extractedFile.filename,
+                    error: error.message,
+                  });
                 }
-              } catch (error: any) {
-                console.error(`Failed to process ZIP ${file.originalname}:`, error.message);
-                errors.push({
-                  filename: file.originalname,
-                  error: `ZIP extraction failed: ${error.message}`,
-                });
               }
-            } else {
-              // Upload single image
-              try {
-                const url = await uploadFile(
-                    file.buffer,
-                    file.originalname,
-                    file.mimetype
-                );
-                console.log(file.originalname)
-                console.log(url)
-                const image = await storage.createImage({
-                  // projectId: req.params.projectId,
-                  filename: file.originalname,
-                  url: url,
-                });
+            } catch (error: any) {
+              console.error(`Failed to process ZIP ${file.originalname}:`, error.message);
+              errors.push({
+                filename: file.originalname,
+                error: `ZIP extraction failed: ${error.message}`,
+              });
+            }
+          } else {
+            // Upload single image
+            try {
+              const url = await uploadFile(
+                file.buffer,
+                file.originalname,
+                file.mimetype
+              );
+              console.log(file.originalname)
+              console.log(url)
+              const image = await storage.createImage({
+                // projectId: req.params.projectId,
+                filename: file.originalname,
+                url: url,
+              });
 
-                uploadedImages.push(image);
-                console.log(`Uploaded: ${file.originalname}`);
-              } catch (error: any) {
-                console.error(`Failed: ${file.originalname}:`, error.message);
-                errors.push({
-                  filename: file.originalname,
-                  error: error.message,
-                });
-              }
+              uploadedImages.push(image);
+              console.log(`Uploaded: ${file.originalname}`);
+            } catch (error: any) {
+              console.error(`Failed: ${file.originalname}:`, error.message);
+              errors.push({
+                filename: file.originalname,
+                error: error.message,
+              });
             }
           }
-
-          console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed`);
-
-          res.json({
-            success: uploadedImages.length,
-            failed: errors.length,
-            images: uploadedImages,
-            errors: errors,
-          });
-        } catch (error: any) {
-          console.error("Upload error:", error);
-          res.status(500).json({ error: error.message || "Failed to upload files" });
         }
+
+        console.log(`Upload complete: ${uploadedImages.length} success, ${errors.length} failed`);
+
+        res.json({
+          success: uploadedImages.length,
+          failed: errors.length,
+          images: uploadedImages,
+          errors: errors,
+        });
+      } catch (error: any) {
+        console.error("Upload error:", error);
+        res.status(500).json({ error: error.message || "Failed to upload files" });
       }
+    }
   );
 
   /**
@@ -820,10 +939,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/projects/:projectId/images", async (req, res) => {
     try {
-      const images = await storage.getImagesByProject(req.params.projectId);     
+      const images = await storage.getImagesByProject(req.params.projectId);
       res.json({
-          success: true,
-          data: images
+        success: true,
+        data: images
       });
     } catch (error: any) {
       console.error("Get images error:", error);
@@ -917,7 +1036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to get portfolio images" });
     }
   });
-  
+
   /**
  * @swagger
  * /api/images:
@@ -942,9 +1061,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get("/api/images", authenticateToken, requireRole(["data_specialist"]),async (req, res) => {
+  app.get("/api/images", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
     try {
-      const images = await storage.getAllImages();     
+      const images = await storage.getAllImages();
       res.json(images);
     } catch (error: any) {
       console.error("Get images error:", error);
@@ -1153,11 +1272,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get('/api/label-types/', async (req,res) => {
+  app.get('/api/label-types/', async (req, res) => {
     try {
       const labels = await storage.getAllLabelTypes();
-      
-      if(!labels){
+
+      if (!labels) {
         res.status(404).json({
           sucess: false,
           error: 'Failed to retrieve label types'
@@ -1165,16 +1284,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({
-          success: true,
-          data: labels
+        success: true,
+        data: labels
       });
 
     } catch (error: any) {
       console.error('Error listing label types:', error);
-        res.status(500).json({
-          success: false,
-          error: 'Error listing label types'
-        });
+      res.status(500).json({
+        success: false,
+        error: 'Error listing label types'
+      });
     }
   });
   /**
@@ -1205,28 +1324,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get('/api/label-types/:id', authenticateToken, async (req,res) =>{
+  app.get('/api/label-types/:id', authenticateToken, async (req, res) => {
     try {
-        const { id } = req.params;
-        const labelType = await storage.getLabelType(id);
-        
-        if (!labelType) {
-          res.status(404).json({
+      const { id } = req.params;
+      const labelType = await storage.getLabelType(id);
+
+      if (!labelType) {
+        res.status(404).json({
           success: false,
           error: 'Label type not found'
         });
-        }
+      }
 
-        res.status(200).json({
-            success: true,
-            data: labelType
-        });
+      res.status(200).json({
+        success: true,
+        data: labelType
+      });
     } catch (error: any) {
-        console.error('Error fetching label type details:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Error fetching label type details' 
-        });
+      console.error('Error fetching label type details:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error fetching label type details'
+      });
     }
   });
   /**
@@ -1259,12 +1378,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.post('/api/label-types', validate(insertLabelSchema) , async (req,res) =>{
+  app.post('/api/label-types', validate(insertLabelSchema), async (req, res) => {
     try {
       const { name, description } = req.body;
 
       const newLabel = await storage.createLabel({ name, description });
-      
+
       res.status(201).json({
         sucess: true,
         data: newLabel,
@@ -1274,8 +1393,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error creating label:', error);
       res.status(500).json({
-          success: false,
-          error: 'Error creating new label '
+        success: false,
+        error: 'Error creating new label '
       });
     }
   });
@@ -1317,23 +1436,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.patch('/api/label-types/:id', authenticateToken, requireRole(['data_specialist']), validate(updateLabelSchema) , async (req,res) =>{
-     try {
+  app.patch('/api/label-types/:id', authenticateToken, requireRole(['data_specialist']), validate(updateLabelSchema), async (req, res) => {
+    try {
       const { id } = req.params;
       const { name, description } = req.body;
-      
+
       const updatedLabel = await storage.updateLabelType(id, { name, description });
-      
+
       res.json({
-          success: true,
-          data: updatedLabel,
-          message: 'Label type updated successfully'
+        success: true,
+        data: updatedLabel,
+        message: 'Label type updated successfully'
       });
     } catch (error) {
       console.error('Error updating label type:', error);
       res.status(500).json({
-          success: false,
-          error: 'Error updating label type'
+        success: false,
+        error: 'Error updating label type'
       });
     }
   });
@@ -1376,24 +1495,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.delete('/api/label-types', authenticateToken, requireRole(['data_specialist']), async (req, res)=>{
+  app.delete('/api/label-types', authenticateToken, requireRole(['data_specialist']), async (req, res) => {
     try {
       const { ids } = req.body;
       console.log(ids)
 
-    if (!Array.isArray(ids)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "IDs must be provided as an array" 
-      });
-    }
+      if (!Array.isArray(ids)) {
+        return res.status(400).json({
+          success: false,
+          error: "IDs must be provided as an array"
+        });
+      }
 
       const deletedLabels = await storage.deleteLabelTypes(ids);
       res.status(204).json({
-            success: true,
-            data: deletedLabels,
-            message: `Successfully deleted  ${deletedLabels.length} label type(s)`
-        });
+        success: true,
+        data: deletedLabels,
+        message: `Successfully deleted  ${deletedLabels.length} label type(s)`
+      });
     } catch (error: any) {
       console.error("Delete label error:", error);
       res.status(500).json({ error: "Failed to delete label" });
@@ -1435,13 +1554,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get('/api/label-types/:id/classes', authenticateToken, requireRole(['data_specialist', 'annotator']), async (req,res) =>{
+  app.get('/api/label-types/:id/classes', authenticateToken, requireRole(['data_specialist', 'annotator']), async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       const typeClass = await storage.getLabelClassesByType(id);
-      
-      if(!typeClass){
+
+      if (!typeClass) {
         res.status(404).json({
           scucess: false,
           error: 'Class not Found'
@@ -1456,8 +1575,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching class:', error);
       res.status(500).json({
-          success: false,
-          error: 'Error fetching class '
+        success: false,
+        error: 'Error fetching class '
       });
     }
   });
@@ -1499,25 +1618,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.post('/api/label-types/:id/classes', authenticateToken, requireRole(['data_specialist']), validate(insertLabelClassSchema, {mergeData: (req) => ({ labelTypeId: req.params.id })}), 
-   async (req,res) =>{
-    try {
-      const newClass = await storage.addLabelClass(req.body);
-      
-      res.status(201).json({
-        sucess: true,
-        data: newClass,
-        message: 'class added successfully'
-      });
+  app.post('/api/label-types/:id/classes', authenticateToken, requireRole(['data_specialist']), validate(insertLabelClassSchema, { mergeData: (req) => ({ labelTypeId: req.params.id }) }),
+    async (req, res) => {
+      try {
+        const newClass = await storage.addLabelClass(req.body);
 
-    } catch (error) {
-      console.error('Error adding class:', error);
-      res.status(500).json({
+        res.status(201).json({
+          sucess: true,
+          data: newClass,
+          message: 'class added successfully'
+        });
+
+      } catch (error) {
+        console.error('Error adding class:', error);
+        res.status(500).json({
           success: false,
           error: 'Error adding new class '
-      });
-    }
-  });
+        });
+      }
+    });
   /**
  * @swagger
  * /api/label-types/{id}/classes/{classId}:
@@ -1557,7 +1676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.delete('/api/label-types/:id/classes/:classId', authenticateToken, requireRole(['data_specialist']), async (req,res) =>{
+  app.delete('/api/label-types/:id/classes/:classId', authenticateToken, requireRole(['data_specialist']), async (req, res) => {
     try {
       const { id, classId } = req.params;
 
@@ -1572,8 +1691,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error removing class:', error);
       res.status(500).json({
-          success: false,
-          error: 'Error removing new class '
+        success: false,
+        error: 'Error removing new class '
       });
     }
   });
@@ -1665,7 +1784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //   try {
 
   //       const newAnnotation = await storage.createAnnotation(req.body);
-        
+
   //       res.status(201).json({
   //         sucess: true,
   //         data: newAnnotation,
@@ -1714,29 +1833,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get('/api/annotation/project/:projectId', authenticateToken, requireRole(['annotator']), async (req,res) => {
+  app.get('/api/annotation/project/:projectId', authenticateToken, requireRole(['annotator']), async (req, res) => {
     try {
-          const { id } = req.params;
-          const annotations = await storage.getAnnotationsByProject(id);
-          
-          if (!annotations) {
-            res.status(404).json({
-            success: false,
-            error: 'Project not found'
-          });
-          }
+      const { id } = req.params;
+      const annotations = await storage.getAnnotationsByProject(id);
 
-          res.status(200).json({
-              success: true,
-              data: annotations
-          });
-      } catch (error: any) {
-          console.error('Error fetching annotations for the project', error);
-          res.status(500).json({
-              success: false,
-              error: 'Error fetching annotations for the project' 
-          });
+      if (!annotations) {
+        res.status(404).json({
+          success: false,
+          error: 'Project not found'
+        });
       }
+
+      res.status(200).json({
+        success: true,
+        data: annotations
+      });
+    } catch (error: any) {
+      console.error('Error fetching annotations for the project', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error fetching annotations for the project'
+      });
+    }
   });
 
   /**
@@ -1771,29 +1890,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.get('/api/annotation/:id', authenticateToken, requireRole(['annotator']), async (req,res) => {
+  app.get('/api/annotation/:id', authenticateToken, requireRole(['annotator']), async (req, res) => {
     try {
-          const { id } = req.params;
-          const annotation = await storage.getAnnotation(id);
-          
-          if (!annotation) {
-            res.status(404).json({
-            success: false,
-            error: 'annotation not found'
-          });
-          }
+      const { id } = req.params;
+      const annotation = await storage.getAnnotation(id);
 
-          res.status(200).json({
-              success: true,
-              data: annotation
-          });
-      } catch (error: any) {
-          console.error('Error fetching annotation', error);
-          res.status(500).json({
-              success: false,
-              error: 'Error fetching annotation' 
-          });
+      if (!annotation) {
+        res.status(404).json({
+          success: false,
+          error: 'annotation not found'
+        });
       }
+
+      res.status(200).json({
+        success: true,
+        data: annotation
+      });
+    } catch (error: any) {
+      console.error('Error fetching annotation', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error fetching annotation'
+      });
+    }
   });
 
   /**
@@ -1828,68 +1947,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
  *       500:
  *         description: Server error
  */
-  app.delete('/api/annotation/:id', authenticateToken, requireRole(['annotator']), async (req,res) => {
+  app.delete('/api/annotation/:id', authenticateToken, requireRole(['annotator']), async (req, res) => {
     try {
-        const { id } = req.params;
+      const { id } = req.params;
 
-        const deletedAnnotation = await storage.deleteAnnotation(id);
+      const deletedAnnotation = await storage.deleteAnnotation(id);
 
-        res.status(201).json({
-          sucess: true,
-          data: deletedAnnotation,
-          message: 'annotation deleted successfully'
-        });
+      res.status(201).json({
+        sucess: true,
+        data: deletedAnnotation,
+        message: 'annotation deleted successfully'
+      });
 
-      } catch (error) {
-        console.error('Error deleting annotation:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Error deleting annotation '
-        });
-      }
+    } catch (error) {
+      console.error('Error deleting annotation:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error deleting annotation '
+      });
+    }
   });
 
-// Statistics
+  // Statistics
 
-/**
- * @swagger
- * /api/annotation/project/{projectId}/stats:
- *   get:
- *     summary: Get annotation statistics for a project (Data Specialist only)
- *     tags: [Annotations]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: projectId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Project ID
- *     responses:
- *       200:
- *         description: Annotation statistics
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalAnnotations:
- *                   type: integer
- *                 completedImages:
- *                   type: integer
- *                 totalImages:
- *                   type: integer
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         description: Access denied
- *       500:
- *         description: Server error
- */
-app.get('/api/annotation/project/:projectId/stats', authenticateToken, requireRole(['data_specialist']), async (req,res)=>{
-  try {
+  /**
+   * @swagger
+   * /api/annotation/project/{projectId}/stats:
+   *   get:
+   *     summary: Get annotation statistics for a project (Data Specialist only)
+   *     tags: [Annotations]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: Project ID
+   *     responses:
+   *       200:
+   *         description: Annotation statistics
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 totalAnnotations:
+   *                   type: integer
+   *                 completedImages:
+   *                   type: integer
+   *                 totalImages:
+   *                   type: integer
+   *       401:
+   *         $ref: '#/components/responses/UnauthorizedError'
+   *       403:
+   *         description: Access denied
+   *       500:
+   *         description: Server error
+   */
+  app.get('/api/annotation/project/:projectId/stats', authenticateToken, requireRole(['data_specialist']), async (req, res) => {
+    try {
       const { projectId } = req.params;
 
       const stats = await storage.getProjectStats(projectId);
@@ -1902,42 +2021,42 @@ app.get('/api/annotation/project/:projectId/stats', authenticateToken, requireRo
     } catch (error) {
       console.error('Error fetching annotation statistics', error);
       res.status(500).json({
-          success: false,
-          error: 'Error fetching annotation statistics'
+        success: false,
+        error: 'Error fetching annotation statistics'
       });
     }
-});
+  });
 
 
 
 
-// ML Engineer Endpoints
- /**
- * @swagger
- * /api/ML-Engineer/images:
- *   get:
- *     summary: Get all images (ML Engineer only)
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of all images
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Image'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         description: Access denied
- *       500:
- *         description: Server error
- */
+  // ML Engineer Endpoints
+  /**
+  * @swagger
+  * /api/ML-Engineer/images:
+  *   get:
+  *     summary: Get all images (ML Engineer only)
+  *     tags: [ML Engineer]
+  *     security:
+  *       - bearerAuth: []
+  *     responses:
+  *       200:
+  *         description: List of all images
+  *         content:
+  *           application/json:
+  *             schema:
+  *               type: array
+  *               items:
+  *                 $ref: '#/components/schemas/Image'
+  *       401:
+  *         $ref: '#/components/responses/UnauthorizedError'
+  *       403:
+  *         description: Access denied
+  *       500:
+  *         description: Server error
+  */
 
-app.get("/api/ML-Engineer/images", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+  app.get("/api/ML-Engineer/images", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
     try {
       const allImages = await storage.getAllImages();
       res.json({
@@ -1952,247 +2071,247 @@ app.get("/api/ML-Engineer/images", authenticateToken, requireRole(["ml_engineer"
   });
 
 
-/**
- * @swagger
- * /api/ML-Engineer/{id}/download:
- *   get:
- *     summary: Download the actual binary image file
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: The UUID of the image to download
- *     responses:
- *       200:
- *         description: The binary image file
- *         content:
- *           image/*:
- *             schema:
- *               type: string
- *               format: binary
- *       404:
- *         description: Image not found
- */
-app.get("/api/ML-Engineer/:id/download", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
-  try {
-    const { id } = req.params;
+  /**
+   * @swagger
+   * /api/ML-Engineer/{id}/download:
+   *   get:
+   *     summary: Download the actual binary image file
+   *     tags: [ML Engineer]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: The UUID of the image to download
+   *     responses:
+   *       200:
+   *         description: The binary image file
+   *         content:
+   *           image/*:
+   *             schema:
+   *               type: string
+   *               format: binary
+   *       404:
+   *         description: Image not found
+   */
+  app.get("/api/ML-Engineer/:id/download", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    try {
+      const { id } = req.params;
 
-    const image = await storage.getImage(id);
-    
-    if (!image) {
-      return res.status(404).json({ error: "Image not found" });
+      const image = await storage.getImage(id);
+
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+
+      const urlParts = image.url.split('/');
+      const filename = urlParts[urlParts.length - 1];
+
+      if (!filename) {
+        return res.status(400).json({ error: "Invalid file path" });
+      }
+
+      const ext = filename.split('.').pop()?.toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === 'png') contentType = 'image/png';
+      if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+      const fileStream = await getFileStream(filename);
+      fileStream.pipe(res);
+
+      fileStream.on('error', (err) => {
+        console.error("Stream error:", err);
+        res.end();
+      });
+
+    } catch (error: any) {
+      console.error("ML: Download image error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to download image" });
+      }
     }
+  });
 
-    const urlParts = image.url.split('/');
-    const filename = urlParts[urlParts.length - 1];
 
-    if (!filename) {
-      return res.status(400).json({ error: "Invalid file path" });
+  /**
+   * @swagger
+   * /api/ML-Engineer/label-types:
+   *   get:
+   *     summary: Get all label definitions (Schema/Ontology)
+   *     tags: [ML Engineer]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: List of all label types available
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SuccessResponse'
+   */
+  app.get("/api/ML-Engineer/label-types", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    try {
+      const labelTypes = await storage.getAllLabelTypes();
+      res.json({
+        success: true,
+        count: labelTypes.length,
+        data: labelTypes
+      });
+    } catch (error: any) {
+      console.error("ML: Get label types error:", error);
+      res.status(500).json({ error: "Failed to fetch label types" });
     }
+  });
 
-    const ext = filename.split('.').pop()?.toLowerCase();
-    let contentType = 'application/octet-stream';
-    if (ext === 'png') contentType = 'image/png';
-    if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  /**
+   * @swagger
+   * /api/ML-Engineer/images/labels:
+   *   post:
+   *     summary: Get ground truth labels for a list of images (Bulk)
+   *     tags: [ML Engineer]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - imageIds
+   *             properties:
+   *               imageIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                   format: uuid
+   *                 example: ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"]
+   *     responses:
+   *       200:
+   *         description: List of annotations for the requested images
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SuccessResponse'
+   */
+  app.post("/api/ML-Engineer/images/labels/", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    try {
+      const { imageIds } = req.body;
 
-    const fileStream = await getFileStream(filename);
-    fileStream.pipe(res);
+      if (!Array.isArray(imageIds)) {
+        return res.status(400).json({ error: "imageIds must be an array" });
+      }
 
-    fileStream.on('error', (err) => {
-      console.error("Stream error:", err);
-      res.end(); 
-    });
+      const annotations = await storage.getEnrichedAnnotationsByImageIds(imageIds);
 
-  } catch (error: any) {
-    console.error("ML: Download image error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to download image" });
+      res.json({
+        success: true,
+        count: annotations.length,
+        data: annotations
+      });
+    } catch (error: any) {
+      console.error("ML: Bulk label fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch bulk labels" });
     }
-  }
-});
+  });
 
 
-/**
- * @swagger
- * /api/ML-Engineer/label-types:
- *   get:
- *     summary: Get all label definitions (Schema/Ontology)
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of all label types available
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- */
-app.get("/api/ML-Engineer/label-types", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
-  try {
-    const labelTypes = await storage.getAllLabelTypes();
-    res.json({
-      success: true,
-      count: labelTypes.length,
-      data: labelTypes
-    });
-  } catch (error: any) {
-    console.error("ML: Get label types error:", error);
-    res.status(500).json({ error: "Failed to fetch label types" });
-  }
-});
+  /**
+   * @swagger
+   * /api/ML-Engineer/images/labels/{imageId}:
+   *   get:
+   *     summary: Get ground truth labels for a specific image
+   *     tags: [ML Engineer]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: imageId
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Annotations for the specific image
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/SuccessResponse'
+   */
+  app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    try {
+      const annotations = await storage.getEnrichedAnnotationsByImageIds([req.params.imageId]);
 
-
-/**
- * @swagger
- * /api/ML-Engineer/images/labels:
- *   post:
- *     summary: Get ground truth labels for a list of images (Bulk)
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - imageIds
- *             properties:
- *               imageIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: uuid
- *                 example: ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"]
- *     responses:
- *       200:
- *         description: List of annotations for the requested images
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- */
-app.post("/api/ML-Engineer/images/labels/", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
-  try {
-    const { imageIds } = req.body;
-
-    if (!Array.isArray(imageIds)) {
-      return res.status(400).json({ error: "imageIds must be an array" });
+      res.json({
+        success: true,
+        imageId: req.params.imageId,
+        annotations: annotations
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch labels" });
     }
-
-    const annotations = await storage.getEnrichedAnnotationsByImageIds(imageIds);
-
-    res.json({
-      success: true,
-      count: annotations.length,
-      data: annotations
-    });
-  } catch (error: any) {
-    console.error("ML: Bulk label fetch error:", error);
-    res.status(500).json({ error: "Failed to fetch bulk labels" });
-  }
-});
+  });
 
 
-/**
- * @swagger
- * /api/ML-Engineer/images/labels/{imageId}:
- *   get:
- *     summary: Get ground truth labels for a specific image
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: imageId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Annotations for the specific image
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
- */
-app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
-  try {
-    const annotations = await storage.getEnrichedAnnotationsByImageIds([req.params.imageId]);
-    
-    res.json({
-      success: true,
-      imageId: req.params.imageId,
-      annotations: annotations
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: "Failed to fetch labels" });
-  }
-});
+  /**
+   * @swagger
+   * /api/ML-Engineer/projects:
+   *   get:
+   *     summary: Get full project manifest (Projects + Images + Label Types)
+   *     tags: [ML Engineer]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: A complex manifest object useful for setting up training jobs
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success: 
+   *                   type: boolean
+   *                   example: true
+   *                 data:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id: 
+   *                         type: string
+   *                         format: uuid
+   *                       name: 
+   *                         type: string
+   *                       labelType:
+   *                         $ref: '#/components/schemas/Label'
+   *                       images:
+   *                         type: array
+   *                         items:
+   *                           $ref: '#/components/schemas/Image'
+   */
+  app.get("/api/ML-Engineer/projects", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    try {
+      const projectManifest = await storage.getAllProjectsWithManifest();
 
-
-/**
- * @swagger
- * /api/ML-Engineer/projects:
- *   get:
- *     summary: Get full project manifest (Projects + Images + Label Types)
- *     tags: [ML Engineer]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: A complex manifest object useful for setting up training jobs
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: 
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id: 
- *                         type: string
- *                         format: uuid
- *                       name: 
- *                         type: string
- *                       labelType:
- *                         $ref: '#/components/schemas/Label'
- *                       images:
- *                         type: array
- *                         items:
- *                           $ref: '#/components/schemas/Image'
- */
-app.get("/api/ML-Engineer/projects", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
-  try {
-    const projectManifest = await storage.getAllProjectsWithManifest();
-    
-    res.json({
-      success: true,
-      count: projectManifest.length,
-      data: projectManifest
-    });
-  } catch (error: any) {
-    console.error("ML: Get project manifest error:", error);
-    res.status(500).json({ error: "Failed to generate project manifest" });
-  }
-});
+      res.json({
+        success: true,
+        count: projectManifest.length,
+        data: projectManifest
+      });
+    } catch (error: any) {
+      console.error("ML: Get project manifest error:", error);
+      res.status(500).json({ error: "Failed to generate project manifest" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;
