@@ -11,6 +11,14 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, count, inArray } from "drizzle-orm";
 
+export interface AnnotationDetailsDTO {
+  id: string;
+  projectName: string | null;
+  labelTypeName: string | null;
+  labelClassName: string | null;
+  annotatorName: string | null;
+}
+
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
@@ -82,7 +90,7 @@ export interface IStorage {
   // }>;
 
   // Annotation methods
-  getAnnotationsByImage(imageId: string): Promise<Annotation[]>;
+  getAnnotationsByImage(imageId: string): Promise<AnnotationDetailsDTO[]>;
   getAnnotationsByUser(userId: string): Promise<Annotation[]>;
   // createAnnotation(annotation: InsertAnnotation): Promise<Annotation>;
 
@@ -336,9 +344,21 @@ export class DbStorage implements IStorage {
   }
 
   // Annotation methods
-  async getAnnotationsByImage(imageId: string): Promise<Annotation[]> {
-    return await db.select().from(annotations).where(eq(annotations.imageId, imageId));
-  }
+  async getAnnotationsByImage(imageId: string): Promise<AnnotationDetailsDTO[]> {
+ return await db
+    .select({
+      id: annotations.id,
+      projectName: projects.name,
+      labelTypeName: labels.name,
+      labelClassName: labelClasses.name,
+      annotatorName: users.name,
+    })
+    .from(annotations)
+    .leftJoin(projects, eq(projects.id, annotations.projectId))
+    .leftJoin(labels, eq(labels.id, annotations.labelId))
+    .leftJoin(labelClasses, eq(labelClasses.id, annotations.labelClassesId))
+    .leftJoin(users, eq(users.id, annotations.userId))
+    .where(eq(annotations.imageId, imageId));  }
 
   async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
     return await db.select().from(annotations).where(eq(annotations.userId, userId));
@@ -579,26 +599,41 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
     // Build the base query for images with project and annotation data
     // Images are now linked via projectImages table instead of direct projectId
 
-    const query = db
-      .select({
-        id: images.id,
-        projectId: projectImages.projectId,
-        filename: images.filename,
-        url: images.url,
-        uploadedAt: images.uploadedAt,
-        projectName: projects.name,
-        isAnnotated: sql<boolean>`CASE WHEN ${annotations.id} IS NOT NULL THEN true ELSE false END`
-      })
-      .from(images)
-      .innerJoin(projectImages, eq(images.id,projectImages.imageId))
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
-      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId,annotations.projectId)))
-      .where(
-        and(
-          eq(projects.createdBy, userId),
-          projectId ? eq(projects.id, projectId) : undefined
-        )
-      );
+const query = db
+  .select({
+    id: images.id,
+    projectId: projectImages.projectId,
+    filename: images.filename,
+    url: images.url,
+    uploadedAt: images.uploadedAt,
+    projectName: projects.name,
+    isAnnotated: sql<boolean>`CASE WHEN COUNT(${annotations.id}) > 0 THEN true ELSE false END`
+  })
+  .from(images)
+  .innerJoin(projectImages, eq(images.id, projectImages.imageId))
+  .innerJoin(projects, eq(projectImages.projectId, projects.id))
+  .leftJoin(
+    annotations,
+    and(
+      eq(images.id, annotations.imageId),
+      eq(projectImages.projectId, annotations.projectId)
+    )
+  )
+  .where(
+    and(
+      eq(projects.createdBy, userId),
+      projectId ? eq(projects.id, projectId) : undefined
+    )
+  )
+  .groupBy(
+    images.id,
+    projectImages.projectId,
+    images.filename,
+    images.url,
+    images.uploadedAt,
+    projects.name
+  );
+
 
     // Apply ordering
     const orderBy = sortOrder === 'asc' ? asc : desc;
