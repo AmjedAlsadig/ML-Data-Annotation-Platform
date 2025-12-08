@@ -3,7 +3,7 @@ import {
   users, type InsertUser, type User,
   projects, type InsertProject, type Project,
   labels, type InsertLabel, type Label,
-  labelClasses, type  InsertLabelClass, type LabelClass,
+  labelClasses, type InsertLabelClass, type LabelClass,
   images, type InsertImage, type Image,
   annotations, type InsertAnnotation, type Annotation,
   projectAssignments, type InsertProjectAssignment, type ProjectAssignment,
@@ -26,12 +26,14 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
 
   deleteProject(id: string): Promise<void>
-  
+
   // getProjectProgress(projectId: string): Promise<{ totalImages: number, annotatedImages: number }>;
   updateProjectStatus(id: string, status: "not_started" | "in_progress" | "completed"): Promise<void>;
 
   assignImagesToProject(projectId: string, imageIds: string[]): Promise<ProjectImage[]>
   removeImageAssignment(projectId: string, imageId: string): Promise<ProjectImage>
+  updateProjectImagePublishedState(projectId: string, imageId: string, published: boolean): Promise<ProjectImage>
+  getProjectImagePublishedState(projectId: string, imageId: string): Promise<boolean>
   getProjectStats(projectId: string): Promise<{
     numberOfImages: number;
     annotatedImages: number;
@@ -45,13 +47,13 @@ export interface IStorage {
   deleteLabel(id: string): Promise<void>;
 
 
-  
+
   getAllLabelTypes(): Promise<(Label & { classCount: number })[]>;
   getLabelType(id: string): Promise<(Label & { classCount: number }) | undefined>;
   // createLabelType(labelType: InsertLabel): Promise<Label>;
   updateLabelType(id: string, labelType: Partial<InsertLabel>): Promise<Label>;
   deleteLabelTypes(ids: string[]): Promise<Label[]>;
-  
+
   // Label Class methods
   getLabelClassesByType(labelTypeId: string): Promise<LabelClass[]>;
   addLabelClass(labelClass: InsertLabelClass): Promise<LabelClass>;
@@ -59,7 +61,7 @@ export interface IStorage {
 
 
   // Image methods
-  getImagesByProject(projectId: string): Promise<Image[]>;
+  getImagesByProject(projectId: string): Promise<(Image & { published: boolean })[]>;
   getImage(id: string): Promise<Image | undefined>;
   createImage(image: InsertImage): Promise<Image>;
   deleteImage(id: string): Promise<void>;
@@ -106,8 +108,8 @@ export interface IStorage {
 
 
   // ML Engineer Methods 
- getEnrichedAnnotationsByImageIds(imageIds: string[]): Promise<any[]> 
- getAllProjectsWithManifest(): Promise<any[]>
+  getEnrichedAnnotationsByImageIds(imageIds: string[]): Promise<any[]>
+  getAllProjectsWithManifest(): Promise<any[]>
 }
 
 export class DbStorage implements IStorage {
@@ -132,7 +134,8 @@ export class DbStorage implements IStorage {
   }
 
   async updateUserRole(id: string, role: 'annotator' | 'data_specialist' | 'admin' | 'ml_engineer'): Promise<void> {
-  await db.update(users).set({ role }).where(eq(users.id, id));}
+    await db.update(users).set({ role }).where(eq(users.id, id));
+  }
   // Project methods
   async getProject(id: string): Promise<Project | undefined> {
     const [project] = await db.select().from(projects).where(eq(projects.id, id));
@@ -142,11 +145,11 @@ export class DbStorage implements IStorage {
   async getProjectsByCreator(userId: string): Promise<Project[]> {
     const projectWOstats = await db.select().from(projects).where(eq(projects.createdBy, userId));
     const projectsWithProgress = await Promise.all(
-        projectWOstats.map(async (a) => {
-          const progress = await this.getProjectStats(a.id);
-          return { ...a, ...progress };
-          // return { ...a.project};
-        })
+      projectWOstats.map(async (a) => {
+        const progress = await this.getProjectStats(a.id);
+        return { ...a, ...progress };
+        // return { ...a.project};
+      })
     );
 
     return projectsWithProgress;
@@ -154,17 +157,17 @@ export class DbStorage implements IStorage {
 
   async getProjectsByAnnotator(userId: string): Promise<Project[]> {
     const assignments = await db
-        .select({ project: projects })
-        .from(projectAssignments)
-        .innerJoin(projects, eq(projectAssignments.projectId, projects.id))
-        .where(eq(projectAssignments.userId, userId));
+      .select({ project: projects })
+      .from(projectAssignments)
+      .innerJoin(projects, eq(projectAssignments.projectId, projects.id))
+      .where(eq(projectAssignments.userId, userId));
 
     const projectsWithProgress = await Promise.all(
-        assignments.map(async (a) => {
-          const progress = await this.getProjectStats(a.project.id);
-          return { ...a.project, ...progress };
-          // return { ...a.project};
-        })
+      assignments.map(async (a) => {
+        const progress = await this.getProjectStats(a.project.id);
+        return { ...a.project, ...progress };
+        // return { ...a.project};
+      })
     );
 
     return projectsWithProgress;
@@ -207,9 +210,9 @@ export class DbStorage implements IStorage {
 
     // Check if images exist
     const existingImages = await db
-    .select({ id: images.id })
-    .from(images)
-    .where(inArray(images.id, imageIds)); 
+      .select({ id: images.id })
+      .from(images)
+      .where(inArray(images.id, imageIds));
 
     if (existingImages.length !== imageIds.length) {
       throw new Error("Some images not found");
@@ -224,11 +227,11 @@ export class DbStorage implements IStorage {
     const result = await db
       .insert(projectImages)
       .values(assignments)
-      .onConflictDoNothing() 
+      .onConflictDoNothing()
       .returning();
 
     return result;
-}
+  }
 
 
 
@@ -242,14 +245,14 @@ export class DbStorage implements IStorage {
   }
 
 
-  
+
   async getAllLabelTypes(): Promise<(Label & { classCount: number })[]> {
-    const result = await db.select({id: labels.id,name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id),}).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).groupBy(labels.id).orderBy(labels.createdAt);
+    const result = await db.select({ id: labels.id, name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id), }).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).groupBy(labels.id).orderBy(labels.createdAt);
 
     return result;
   }
   async getLabelType(id: string): Promise<(Label & { classCount: number }) | undefined> {
-    const result = await db.select({id: labels.id, name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id),}).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).where(eq(labels.id, id)).groupBy(labels.id);
+    const result = await db.select({ id: labels.id, name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id), }).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).where(eq(labels.id, id)).groupBy(labels.id);
 
     return result[0] || undefined;
   }
@@ -266,18 +269,18 @@ export class DbStorage implements IStorage {
 
   async deleteLabelTypes(ids: string[]): Promise<Label[]> {
     if (ids.length === 0) return [];
-  
+
 
     const validIds = ids.filter(id => id && id.trim() !== '');
-    
+
     if (validIds.length === 0) return [];
 
     const result = await db.delete(labels)
-       .where(inArray(sql`${labels.id}::text`, validIds))
+      .where(inArray(sql`${labels.id}::text`, validIds))
       .returning();
     return result;
   }
-  
+
   // Label Class Methods
   async getLabelClassesByType(labelTypeId: string): Promise<LabelClass[]> {
     return await db.select().from(labelClasses).where(eq(labelClasses.labelTypeId, labelTypeId)).orderBy(labelClasses.name);
@@ -289,7 +292,7 @@ export class DbStorage implements IStorage {
   }
 
   async removeLabelClass(labelTypeId: string, classId: string): Promise<LabelClass> {
-    const [labelClass] = await db.delete(labelClasses).where(and(eq(labelClasses.id, classId),eq(labelClasses.labelTypeId, labelTypeId))).returning();
+    const [labelClass] = await db.delete(labelClasses).where(and(eq(labelClasses.id, classId), eq(labelClasses.labelTypeId, labelTypeId))).returning();
     if (!labelClass) {
       throw new Error(`Label class with id ${classId} not found in label type ${labelTypeId}`);
     }
@@ -297,11 +300,44 @@ export class DbStorage implements IStorage {
   }
 
   async removeImageAssignment(projectId: string, imageId: string): Promise<ProjectImage> {
-    const [image] = await db.delete(projectImages).where(and(eq(projectImages.projectId, projectId),eq(projectImages.imageId, imageId))).returning();
+    const [image] = await db.delete(projectImages).where(and(eq(projectImages.projectId, projectId), eq(projectImages.imageId, imageId))).returning();
     if (!image) {
       throw new Error(`image with id ${imageId} not found in project ${projectId}`);
     }
     return image;
+  }
+
+  async updateProjectImagePublishedState(projectId: string, imageId: string, published: boolean): Promise<ProjectImage> {
+    const [projectImage] = await db
+      .update(projectImages)
+      .set({ published })
+      .where(and(
+        eq(projectImages.projectId, projectId),
+        eq(projectImages.imageId, imageId)
+      ))
+      .returning();
+
+    if (!projectImage) {
+      throw new Error(`Image with id ${imageId} not found in project ${projectId}`);
+    }
+
+    return projectImage;
+  }
+
+  async getProjectImagePublishedState(projectId: string, imageId: string): Promise<boolean> {
+    const [projectImage] = await db
+      .select({ published: projectImages.published })
+      .from(projectImages)
+      .where(and(
+        eq(projectImages.projectId, projectId),
+        eq(projectImages.imageId, imageId)
+      ));
+
+    if (!projectImage) {
+      throw new Error(`Image with id ${imageId} not found in project ${projectId}`);
+    }
+
+    return projectImage.published;
   }
 
   // // Image methods
@@ -309,21 +345,22 @@ export class DbStorage implements IStorage {
   //   return await db.select().from(images).where(eq(images.projectId, projectId));
   // }
 
-  async getImagesByProject(projectId: string): Promise<Image[]> {
-  const result = await db
-    .select({
-      id: images.id,
-      filename: images.filename,
-      url: images.url,
-      uploadedAt: images.uploadedAt,
-    })
-    .from(projectImages)
-    .innerJoin(images, eq(projectImages.imageId, images.id))
-    .where(eq(projectImages.projectId, projectId))
-    .orderBy(images.uploadedAt);
+  async getImagesByProject(projectId: string): Promise<(Image & { published: boolean })[]> {
+    const result = await db
+      .select({
+        id: images.id,
+        filename: images.filename,
+        url: images.url,
+        uploadedAt: images.uploadedAt,
+        published: projectImages.published,
+      })
+      .from(projectImages)
+      .innerJoin(images, eq(projectImages.imageId, images.id))
+      .where(eq(projectImages.projectId, projectId))
+      .orderBy(images.uploadedAt);
 
-  return result;
-}
+    return result;
+  }
 
   async getImage(id: string): Promise<Image | undefined> {
     const [image] = await db.select().from(images).where(eq(images.id, id));
@@ -374,26 +411,26 @@ export class DbStorage implements IStorage {
   // }
 
 
-async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> {
+  async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> {
     const [annotation] = await db.insert(annotations).values(insertAnnotation).returning();
     return annotation;
   }
 
   async deleteAnnotation(annotationId: string, annotatorId?: string): Promise<Annotation> {
     let whereCondition;
-  
-  if (annotatorId) {
-    // User can only delete their own annotations
-    whereCondition = and(
-      eq(annotations.id, annotationId),
-      eq(annotations.userId, annotatorId)
-    );
-  } else {
-    // Admin/Data Specialist can delete any annotation
-    whereCondition = eq(annotations.id, annotationId);
-  }
 
-  const [deletedAnnotation] = await db.delete(annotations).where(whereCondition).returning();
+    if (annotatorId) {
+      // User can only delete their own annotations
+      whereCondition = and(
+        eq(annotations.id, annotationId),
+        eq(annotations.userId, annotatorId)
+      );
+    } else {
+      // Admin/Data Specialist can delete any annotation
+      whereCondition = eq(annotations.id, annotationId);
+    }
+
+    const [deletedAnnotation] = await db.delete(annotations).where(whereCondition).returning();
 
     if (!deletedAnnotation) {
       throw new Error(`Annotation with id ${annotationId} not found${annotatorId ? ' or access denied' : ''}`);
@@ -421,7 +458,7 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
         labelClassesId: annotations.labelClassesId,
         annotatedAt: annotations.annotatedAt,
         labelId: annotations.labelId,
-        
+
         // Joined fields
         imageFilename: images.filename,
         imageUrl: images.url,
@@ -496,7 +533,7 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
     return result;
   }
 
-    // Get annotation statistics for a project
+  // Get annotation statistics for a project
   async getProjectStats(projectId: string): Promise<{
     numberOfImages: number;
     annotatedImages: number;
@@ -512,9 +549,9 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
       .from(annotations)
       .where(eq(annotations.projectId, projectId));
 
-      const projectResult = await db.select({
-        numberOfImages: count(projectImages.id),
-      })
+    const projectResult = await db.select({
+      numberOfImages: count(projectImages.id),
+    })
       .from(projectImages)
       .where(eq(projectImages.projectId, projectId));
 
@@ -526,20 +563,20 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
     };
   }
 
-  
-  
+
+
   // Project assignment methods
   async assignUserToProject(insertAssignment: InsertProjectAssignment): Promise<ProjectAssignment> {
     // Check if assignment already exists
     const [existing] = await db
-        .select()
-        .from(projectAssignments)
-        .where(
-            and(
-                eq(projectAssignments.projectId, insertAssignment.projectId),
-                eq(projectAssignments.userId, insertAssignment.userId)
-            )
-        );
+      .select()
+      .from(projectAssignments)
+      .where(
+        and(
+          eq(projectAssignments.projectId, insertAssignment.projectId),
+          eq(projectAssignments.userId, insertAssignment.userId)
+        )
+      );
 
     if (existing) {
       // Return existing assignment instead of creating duplicate
@@ -595,9 +632,9 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
         isAnnotated: sql<boolean>`CASE WHEN ${annotations.id} IS NOT NULL THEN true ELSE false END`
       })
       .from(images)
-      .innerJoin(projectImages, eq(images.id,projectImages.imageId))
+      .innerJoin(projectImages, eq(images.id, projectImages.imageId))
       .innerJoin(projects, eq(projectImages.projectId, projects.id))
-      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId,annotations.projectId)))
+      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId, annotations.projectId)))
       .where(
         and(
           eq(projects.createdBy, userId),
@@ -620,7 +657,7 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
     const totalCountQuery = db
       .select({ count: sql<number>`count(*)` })
       .from(images)
-      .innerJoin(projectImages, eq(images.id,projectImages.imageId))
+      .innerJoin(projectImages, eq(images.id, projectImages.imageId))
       .innerJoin(projects, eq(projectImages.projectId, projects.id))
       .where(
         and(
@@ -641,7 +678,7 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
       .from(images)
       .innerJoin(projectImages, eq(images.id, projectImages.imageId))
       .innerJoin(projects, eq(projectImages.projectId, projects.id))
-      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId,annotations.projectId)))
+      .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId, annotations.projectId)))
       .where(eq(projects.createdBy, userId));
 
     const [stats] = await statsQuery;
@@ -686,51 +723,51 @@ async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> 
   }
 
 
-// Get All Projects with their Images and Label Type
-async getAllProjectsWithManifest(): Promise<any[]> {
-  
-  // Get the base project info + Label Type info
-  const projectsList = await db
-    .select({
-      id: projects.id,
-      name: projects.name,
-      description: projects.description,
-      status: projects.status,
-      createdAt: projects.createdAt,
-      labelType: {
-        id: labels.id,
-        name: labels.name,
-        description: labels.description
-      },
-      createdBy: {
-        id: users.id,
-        email: users.email
-      }
-    })
-    .from(projects)
-    .leftJoin(labels, eq(projects.labelTypeId, labels.id))
-    .leftJoin(users, eq(projects.createdBy, users.id));
+  // Get All Projects with their Images and Label Type
+  async getAllProjectsWithManifest(): Promise<any[]> {
 
-  // For each project, fetch the list of assigned images -- IN PARALLEL for effeciency 
-  const fullManifest = await Promise.all(
-    projectsList.map(async (project) => {
-      // Get all images assigned to this specific project
-      const imagesInProject = await this.getImagesByProject(project.id);
-      
-      return {
-        ...project,
-        // The requirement says "including images", so we attach the list here
-        images: imagesInProject.map(img => ({
-          id: img.id,
-          filename: img.filename,
-          url: img.url
-        }))
-      };
-    })
-  );
+    // Get the base project info + Label Type info
+    const projectsList = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        description: projects.description,
+        status: projects.status,
+        createdAt: projects.createdAt,
+        labelType: {
+          id: labels.id,
+          name: labels.name,
+          description: labels.description
+        },
+        createdBy: {
+          id: users.id,
+          email: users.email
+        }
+      })
+      .from(projects)
+      .leftJoin(labels, eq(projects.labelTypeId, labels.id))
+      .leftJoin(users, eq(projects.createdBy, users.id));
 
-  return fullManifest;
-}
+    // For each project, fetch the list of assigned images -- IN PARALLEL for effeciency 
+    const fullManifest = await Promise.all(
+      projectsList.map(async (project) => {
+        // Get all images assigned to this specific project
+        const imagesInProject = await this.getImagesByProject(project.id);
+
+        return {
+          ...project,
+          // The requirement says "including images", so we attach the list here
+          images: imagesInProject.map(img => ({
+            id: img.id,
+            filename: img.filename,
+            url: img.url
+          }))
+        };
+      })
+    );
+
+    return fullManifest;
+  }
 
 }
 

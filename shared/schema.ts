@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -106,6 +106,7 @@ export const projectImages = pgTable("project_images", {
   projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   imageId: varchar("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
   assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  published: boolean("published").notNull().default(false),
 }, (table) => ({
   // Prevent duplicate project assignments for the same image
   uniqueProjectImage: sql`UNIQUE (${table.projectId}, ${table.imageId})`,
@@ -127,13 +128,13 @@ export type ProjectImage = typeof projectImages.$inferSelect;
 // Annotations table
 export const annotations = pgTable("annotations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId:varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   imageId: varchar("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id),
   labelId: varchar("label_id").notNull().references(() => labels.id), // the annotations are done with classes not labels 
   labelClassesId: varchar("label_class_id").notNull().references(() => labelClasses.id),
   annotatedAt: timestamp("annotated_at").defaultNow().notNull(),
-},(table) => ({
+}, (table) => ({
   // Prevent duplicate annotation with the same class for the same image
   uniqueUserProject: sql`UNIQUE (${table.imageId}, ${table.labelClassesId})`,
 }));
