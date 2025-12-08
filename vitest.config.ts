@@ -4,11 +4,13 @@ import path from "path";
 export default defineConfig({
   test: {
     globals: true,
-    environment: "node",
+    environment: "jsdom", 
   },
   resolve: {
     alias: {
-      "@backend": path.resolve(__dirname, "backend"),
+      "@": path.resolve(__dirname, "frontend/src"),   
+      "@backend": path.resolve(__dirname, "backend"), 
+      "@shared": path.resolve(__dirname, "shared"),
     },
   },
 });
