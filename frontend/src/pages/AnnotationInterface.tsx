@@ -385,6 +385,32 @@ export default function AnnotationInterface() {
         throw new Error('Authentication token not found');
       }
 
+      // First, save the annotation if a label is selected
+      if (selectedLabelClassId && labelType?.id) {
+        const annotationResponse = await fetch('/api/annotations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            projectId: project.id,
+            imageId: currentImage.id,
+            labelClassesId: selectedLabelClassId,
+            labelId: labelType.id
+          }),
+        });
+
+        if (!annotationResponse.ok) {
+          const errorText = await annotationResponse.text();
+          console.error('Annotation save error:', errorText);
+          // Don't throw - still allow publish even if annotation fails
+        } else {
+          console.log('Annotation saved before publish');
+        }
+      }
+
+      // Then publish the image
       const response = await fetch(`/api/projects/${project.id}/images/${currentImage.id}/publish`, {
         method: 'PATCH',
         headers: {

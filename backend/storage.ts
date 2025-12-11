@@ -412,8 +412,36 @@ export class DbStorage implements IStorage {
 
 
   async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> {
-    const [annotation] = await db.insert(annotations).values(insertAnnotation).returning();
-    return annotation;
+    // Check if an annotation already exists for this image in this project
+    // We want to update existing annotations instead of creating duplicates
+    const [existingAnnotation] = await db
+      .select()
+      .from(annotations)
+      .where(
+        and(
+          eq(annotations.imageId, insertAnnotation.imageId),
+          eq(annotations.projectId, insertAnnotation.projectId)
+        )
+      );
+
+    if (existingAnnotation) {
+      // Update the existing annotation with the new label class
+      const [updatedAnnotation] = await db
+        .update(annotations)
+        .set({
+          labelClassesId: insertAnnotation.labelClassesId,
+          labelId: insertAnnotation.labelId,
+          userId: insertAnnotation.userId,
+          annotatedAt: sql`NOW()`,
+        })
+        .where(eq(annotations.id, existingAnnotation.id))
+        .returning();
+      return updatedAnnotation;
+    } else {
+      // Create a new annotation
+      const [annotation] = await db.insert(annotations).values(insertAnnotation).returning();
+      return annotation;
+    }
   }
 
   async deleteAnnotation(annotationId: string, annotatorId?: string): Promise<Annotation> {
