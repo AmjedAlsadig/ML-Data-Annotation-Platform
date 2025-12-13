@@ -96,39 +96,39 @@ export default function SpecialistDashboard() {
   }, []);
 
   const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
-  e.stopPropagation(); // spriječi otvaranje projekta
-  if (!confirm("Are you sure you want to delete this project?")) return;
+    e.stopPropagation(); // spriječi otvaranje projekta
+    if (!confirm("Are you sure you want to delete this project?")) return;
 
-  try {
-    const token = localStorage.getItem('authToken');
+    try {
+      const token = localStorage.getItem('authToken');
 
-    const response = await fetch(`/api/projects/${projectId}`, {
-      method: "DELETE",
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      credentials: "include"
-    });
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE",
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: "include"
+      });
 
-    if (!response.ok) {
-      const data = await response.json();
-      alert(data.error || "Failed to delete project");
-      return;
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || "Failed to delete project");
+        return;
+      }
+
+      // Reload
+      await loadData();
+
+      toast({
+        title: "Project deleted",
+        description: "The project was successfully removed."
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting project.");
     }
-
-    // Reload
-    await loadData();
-
-    toast({
-      title: "Project deleted",
-      description: "The project was successfully removed."
-    });
-
-  } catch (err) {
-    console.error(err);
-    alert("Error deleting project.");
-  }
-};
+  };
 
   const loadPortfolioStats = async () => {
     try {
@@ -682,8 +682,8 @@ export default function SpecialistDashboard() {
                                 <div
                                   key={image.id}
                                   className={`relative aspect-square cursor-pointer border-2 rounded-md overflow-hidden transition-all ${selectedImageIds.includes(image.id)
-                                      ? 'border-primary ring-2 ring-primary'
-                                      : 'border-transparent hover:border-muted-foreground/50'
+                                    ? 'border-primary ring-2 ring-primary'
+                                    : 'border-transparent hover:border-muted-foreground/50'
                                     }`}
                                   onClick={() => handleImageSelection(image.id)}
                                 >
@@ -778,7 +778,7 @@ export default function SpecialistDashboard() {
                     {projects.map((project) => {
                       let projectProgress;
                       if (project.numberOfImages > 0) {
-                        projectProgress = ((project.annotatedImages / project.numberOfImages) * 100); // Mock value - you can replace with actual stat
+                        projectProgress = parseFloat((((project.annotatedImages / project.numberOfImages) * 100)).toFixed(1));
                       } else {
                         projectProgress = 0;
                       }

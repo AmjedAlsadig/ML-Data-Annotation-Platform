@@ -3,7 +3,7 @@ import { useLocation, useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, ArrowLeft, Tag, ImageIcon, Users, Plus, Trash2, AlertCircle, Edit, CheckCircle2 } from 'lucide-react';
+import { LogOut, ArrowLeft, Tag, ImageIcon, Users, Plus, Trash2, AlertCircle, Edit, CheckCircle2, Lock, Unlock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -50,6 +50,7 @@ interface Image {
   filename: string;
   url: string;
   uploadedAt: string;
+  published: boolean;
 }
 
 interface PortfolioImage extends Image {
@@ -270,7 +271,7 @@ export default function ProjectDetails() {
 
       if (response.ok) {
         const data = await response.json();
-        
+
         // Handle different response structures
         let imagesArray;
         if (Array.isArray(data)) {
@@ -474,7 +475,8 @@ export default function ProjectDetails() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete image');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete image');
       }
 
       setImages(images.filter(img => img.id !== imageId));
@@ -487,6 +489,51 @@ export default function ProjectDetails() {
       toast({
         title: 'Error',
         description: err.message || 'Failed to delete image',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleTogglePublished = async (imageId: string, currentPublishedState: boolean) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const newPublishedState = !currentPublishedState;
+
+      const response = await fetch(`/api/projects/${projectId}/images/${imageId}/publish`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          published: newPublishedState,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update published state');
+      }
+
+      // Update local state
+      setImages(images.map(img =>
+        img.id === imageId
+          ? { ...img, published: newPublishedState }
+          : img
+      ));
+
+      toast({
+        title: 'Success',
+        description: `Image ${newPublishedState ? 'published' : 'unpublished'} successfully`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to update published state',
         variant: 'destructive',
       });
     }
@@ -723,7 +770,7 @@ export default function ProjectDetails() {
               </CardContent>
             </Card>
 
-            
+
 
             <Card>
               <CardHeader className="pb-3">
@@ -752,7 +799,7 @@ export default function ProjectDetails() {
                 <h3 className="text-xl font-semibold">
                   Label Classes {labelType && `for ${labelType.name}`}
                 </h3>
-                
+
               </div>
 
               <Card>
@@ -760,8 +807,8 @@ export default function ProjectDetails() {
                   <div className="divide-y">
                     {labelClasses.length === 0 ? (
                       <p className="p-4 text-muted-foreground text-center">
-                        {project?.labelTypeId 
-                          ? "No label classes defined for this label type." 
+                        {project?.labelTypeId
+                          ? "No label classes defined for this label type."
                           : "This project doesn't have a label type assigned yet."}
                       </p>
                     ) : (
@@ -810,11 +857,10 @@ export default function ProjectDetails() {
                           {availableImages.map((image) => (
                             <div
                               key={image.id}
-                              className={`relative aspect-square cursor-pointer border-2 rounded-md overflow-hidden transition-all ${
-                                selectedImageIds.includes(image.id)
-                                  ? 'border-primary ring-2 ring-primary'
-                                  : 'border-transparent hover:border-muted-foreground/50'
-                              }`}
+                              className={`relative aspect-square cursor-pointer border-2 rounded-md overflow-hidden transition-all ${selectedImageIds.includes(image.id)
+                                ? 'border-primary ring-2 ring-primary'
+                                : 'border-transparent hover:border-muted-foreground/50'
+                                }`}
                               onClick={() => handleImageSelection(image.id)}
                             >
                               <img
@@ -833,7 +879,7 @@ export default function ProjectDetails() {
                       )}
                     </div>
                     <DialogFooter>
-                      <Button 
+                      <Button
                         onClick={handleAssignImages}
                         disabled={selectedImageIds.length === 0 || isAssigningImages}
                         data-testid="button-submit-image-assignment"
@@ -854,22 +900,39 @@ export default function ProjectDetails() {
                   </Card>
                 ) : (
                   images.map((image) => (
-                    <Card key={image.id} className="relative group aspect-square overflow-hidden">
-                      <img
-                        src={image.url}
-                        alt={image.filename}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => handleDeleteImage(image.id)}
-                          data-testid={`button-delete-image-${image.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                    <Card key={image.id} className="relative group overflow-hidden">
+                      {/* Published Badge */}
+                      {image.published && (
+                        <div className="absolute top-2 left-2 z-10 bg-primary text-primary-foreground px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          Published
+                        </div>
+                      )}
+
+                      {/* Image */}
+                      <div className="aspect-square overflow-hidden">
+                        <img
+                          src={image.url}
+                          alt={image.filename}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
+
+                      {/* Delete Button Overlay (only if not published) */}
+                      {!image.published && (
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteImage(image.id)}
+                            data-testid={`button-delete-image-${image.id}`}
+                            className="flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </Button>
+                        </div>
+                      )}
                     </Card>
                   ))
                 )}
