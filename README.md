@@ -92,7 +92,7 @@ To generate coverage reports (text, HTML, LCOV for [Codecov](https://codecov.io)
 ```bash
 npm run test:coverage
 ```
-View HTML report: open `coverage/index.html` locally after running the command.
+View HTML report: open [coverage/index.html](file:///Users/vivek/Documents/GitHub/ml-data-platform/coverage/index.html) locally after running the command.
 
 ### Swagger URL
 
