@@ -1,6 +1,4 @@
-/// <reference types="vitest/globals" />
-
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@shared/schema", () => ({
   users: {},
@@ -13,23 +11,39 @@ vi.mock("@shared/schema", () => ({
   projectImages: {}
 }));
 
+// -------------------- Generic Query Builder Mock --------------------
+// We mimic drizzle-like fluent API. IMPORTANT: methods that are awaited must return arrays.
+function createQB(rows: any[] = []) {
+  const qb: any = {
+    _rows: rows,
+    _filtered: rows,
 
-// -------------------- Mock DB functionalities --------------------
+    from: vi.fn().mockReturnThis(),
+    innerJoin: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    offset: vi.fn().mockReturnThis(),
 
-// Build fake DB backend with required mock functionalities
-const qb: any = {
-  from: vi.fn().mockReturnThis(),
-  innerJoin: vi.fn().mockReturnThis(),
-  where: vi.fn().mockReturnThis(),
-  orderBy: vi.fn().mockReturnThis(),
-  insert: vi.fn().mockReturnThis(),
-  update: vi.fn().mockReturnThis(),
-  delete: vi.fn().mockReturnThis(),
-  returning: vi.fn().mockReturnThis(),
-  values: vi.fn().mockReturnThis(),
-  execute: vi.fn(),
-};
+    // By default, where returns rows (array). You can override per-test with mockImplementation.
+    where: vi.fn().mockImplementation(() => qb._filtered),
 
+    // Some queries use orderBy after where; return array as well.
+    orderBy: vi.fn().mockImplementation(() => qb._filtered),
+
+    // Insert/update/delete chains
+    values: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    onConflictDoNothing: vi.fn().mockReturnThis(),
+
+    returning: vi.fn().mockImplementation(() => qb._filtered),
+  };
+
+  return qb;
+}
+
+// We keep ONE shared qb instance for most tests, but we reset its mocks in beforeEach.
+const qb = createQB();
 
 vi.mock("../backend/db", () => ({
   db: {
@@ -41,6 +55,7 @@ vi.mock("../backend/db", () => ({
 }));
 
 import { DbStorage } from "../backend/storage";
+import { db } from "../backend/db";
 
 // -------------------- Mock Data --------------------
 
@@ -95,23 +110,35 @@ const mockAnnotations = [
   }
 ] as const;
 
+beforeEach(() => {
+  vi.clearAllMocks();
 
+  // Reset qb behaviour to safe defaults
+  qb._rows = [];
+  qb._filtered = [];
+  qb.from.mockReturnThis();
+  qb.innerJoin.mockReturnThis();
+  qb.leftJoin.mockReturnThis();
+  qb.groupBy.mockReturnThis();
+  qb.limit.mockReturnThis();
+  qb.offset.mockReturnThis();
+  qb.values.mockReturnThis();
+  qb.set.mockReturnThis();
+  qb.onConflictDoNothing.mockReturnThis();
 
+  // Default: where/orderBy return qb._filtered (array)
+  qb.where.mockImplementation(() => qb._filtered);
+  qb.orderBy.mockImplementation(() => qb._filtered);
+  qb.returning.mockImplementation(() => qb._filtered);
+});
 
-/// ---- AT-1, AT-2, AT-3 -----
+// -------------------- AT-1, AT-2, AT-3 --------------------
 
-// Annotator can see all annotations belonging to a project
 describe("getAnnotationsByProject", () => {
   test("Check results", async () => {
-
-    qb.from.mockReturnThis();
-    qb.innerJoin.mockReturnThis();
-    qb.where.mockImplementation(() => {
-      qb._filtered = mockAnnotations.filter(r => r.projectId === "101");
-      return qb;
-    });
-    
-     qb.orderBy.mockImplementation(() => qb._filtered);
+    qb._filtered = mockAnnotations.filter(r => r.projectId === "101");
+    qb.where.mockImplementation(() => qb);              // where returns qb (fluent)
+    qb.orderBy.mockImplementation(() => qb._filtered);  // orderBy returns final array
 
     const storage = new DbStorage();
     const result = await storage.getAnnotationsByProject("101");
@@ -121,19 +148,10 @@ describe("getAnnotationsByProject", () => {
   });
 });
 
-
-// Annotator can see all annotattions belonging to a project, entered by him/herself
 describe("getAnnotationsByProjectAndAnnotator", () => {
   test("Check results", async () => {
-
-    qb.from.mockReturnThis();
-    qb.innerJoin.mockReturnThis();
-    qb.where.mockImplementation(() => {
-
-    qb._filtered = mockAnnotations.filter(r => r.projectId === "101" && r.userId === "502" );
-      return qb;
-    });
-
+    qb._filtered = mockAnnotations.filter(r => r.projectId === "101" && r.userId === "502");
+    qb.where.mockImplementation(() => qb);
     qb.orderBy.mockImplementation(() => qb._filtered);
 
     const storage = new DbStorage();
@@ -144,32 +162,17 @@ describe("getAnnotationsByProjectAndAnnotator", () => {
   });
 });
 
-
-// getLabelClassesByType
 describe("getLabelClassesByType", () => {
   test("Check results", async () => {
-
     const mockLabelClasses = [
-      {
-        id: "1",
-        name: "Border Collie",
-        labelTypeId: "t1"
-      },
-      {
-        id: "2",
-        name: "German Shepherd",
-        labelTypeId: "t1"
-      },
-      {
-        id: "3",
-        name: "Elephant",
-        labelTypeId: "t2"
-      }
+      { id: "1", name: "Border Collie", labelTypeId: "t1" },
+      { id: "2", name: "German Shepherd", labelTypeId: "t1" },
+      { id: "3", name: "Elephant", labelTypeId: "t2" }
     ] as const;
 
-    qb.from.mockReturnThis();
-    qb.where.mockReturnThis();
-    qb.orderBy.mockReturnValue(mockLabelClasses);
+    qb._filtered = [...mockLabelClasses];
+    qb.where.mockImplementation(() => qb);
+    qb.orderBy.mockImplementation(() => qb._filtered);
 
     const storage = new DbStorage();
     const result = await storage.getLabelClassesByType("t1");
@@ -181,17 +184,12 @@ describe("getLabelClassesByType", () => {
   });
 });
 
+// -------------------- AT-4, AT-5, AT-6, AT-7 --------------------
 
-
-/// ---- AT-4, AT-5, AT-6, AT-7 -----
 describe("getAnnotation", () => {
   test("returns mocked annotation with details", async () => {
-
-    qb.from.mockReturnThis();
-    qb.innerJoin.mockReturnThis();
-    qb.where.mockImplementation(() =>
-      mockAnnotations.filter(r => r.id === "1")
-    );
+    qb._filtered = mockAnnotations.filter(r => r.id === "1");
+    qb.where.mockImplementation(() => qb._filtered); // awaited on where in storage.getAnnotation
 
     const storage = new DbStorage();
     const result = await storage.getAnnotation("1");
@@ -203,15 +201,11 @@ describe("getAnnotation", () => {
   });
 });
 
-
 describe("deleteAnnotation", () => {
   test("user deletes their own annotation", async () => {
-
-    qb.delete.mockReturnThis();
+    qb._filtered = [{id: "1", userId: "501"}];
     qb.where.mockReturnThis();
-    qb.returning.mockReturnValue([
-      { id: "1", userId: "501" }
-    ]);
+    qb.returning.mockImplementation(() => qb._filtered);
 
     const storage = new DbStorage();
     const result = await storage.deleteAnnotation("1", "501");
@@ -221,56 +215,66 @@ describe("deleteAnnotation", () => {
   });
 
   test("user cannot delete someone else's annotation", async () => {
-
-    qb.returning.mockReturnValue([]); // no row deleted
+    qb.where.mockReturnThis();                 // IMPORTANT: keep chaining
+    qb._filtered = [];                         // no row deleted
+    qb.returning.mockImplementation(() => qb._filtered);
 
     const storage = new DbStorage();
 
     await expect(storage.deleteAnnotation("1", "999"))
-      .rejects
-      .toThrow("not found or access denied");
+        .rejects
+        .toThrow("not found or access denied");
   });
 
   test("admin deletes any annotation", async () => {
-
-    qb.returning.mockReturnValue([
-      { id: "1", userId: "501" }
-    ]);
+    qb.where.mockReturnThis();                 // IMPORTANT: keep chaining
+    qb._filtered = [{id: "1", userId: "501"}];
+    qb.returning.mockImplementation(() => qb._filtered);
 
     const storage = new DbStorage();
     const result = await storage.deleteAnnotation("1");
 
     expect(result.id).toBe("1");
   });
-});
 
+// -------------------- createAnnotation --------------------
 
-describe("createAnnotation", () => {
-  test("creates annotation and returns inserted row", async () => {
+  describe("createAnnotation", () => {
+    test("creates annotation and returns inserted row", async () => {
+      const newAnnotation = {
+        id: "10",
+        projectId: "200",
+        imageId: "300",
+        userId: "900",
+        labelClassesId: "700",
+        annotatedAt: "2025-01-01T00:00:00Z",
+        labelId: "abc123"
+      };
 
-    const newAnnotation = {
-      id: "10",
-      projectId: "200",
-      imageId: "300",
-      userId: "900",
-      labelClassesId: "700",
-      annotatedAt: "2025-01-01T00:00:00Z",
-      labelId: "abc123"
-    };
+      // createAnnotation does:
+      // 1) select().from().where(...) -> array (existingAnnotation) => we want NONE
+      // 2) insert(...).values(...).returning() -> array with inserted row
+      (db.select as any).mockImplementationOnce(() => {
+        const qb1 = createQB([]);
+        qb1.where.mockImplementation(() => []); // IMPORTANT: returns array (awaited)
+        return qb1;
+      });
 
-    
-    qb.insert.mockReturnThis();
-    qb.values.mockReturnThis();
-    qb.returning.mockReturnValue([newAnnotation]);
+      (db.insert as any).mockImplementationOnce(() => {
+        const qb2 = createQB([newAnnotation]);
+        qb2.values.mockReturnThis();
+        qb2.returning.mockImplementation(() => [newAnnotation]);
+        return qb2;
+      });
 
-    const storage = new DbStorage();
-    const result = await storage.createAnnotation(newAnnotation);
+      const storage = new DbStorage();
+      const result = await storage.createAnnotation(newAnnotation as any);
 
-    expect(result).toBeDefined();
-    expect(result.id).toBe("10");
-    expect(result.projectId).toBe("200");
-    expect(result.userId).toBe("900");
-    expect(result.labelClassesId).toBe("700");
+      expect(result).toBeDefined();
+      expect(result.id).toBe("10");
+      expect(result.projectId).toBe("200");
+      expect(result.userId).toBe("900");
+      expect(result.labelClassesId).toBe("700");
+    });
   });
 });
-

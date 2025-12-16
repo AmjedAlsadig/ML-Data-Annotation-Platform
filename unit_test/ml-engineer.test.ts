@@ -39,15 +39,13 @@ import { db } from "../backend/db";
 
 // ================================ getProjectStats ================================
 describe("ML Engineer – getProjectStats()", () => {
-
   test("returns correct project statistics", async () => {
-
     (db.select as any).mockImplementationOnce(() =>
-      createQB([{ totalAnnotations: 10, annotatedImages: 5, activeAnnotators: 2 }])
+        createQB([{ totalAnnotations: 10, annotatedImages: 5, activeAnnotators: 2 }])
     );
 
     (db.select as any).mockImplementationOnce(() =>
-      createQB([{ numberOfImages: 12 }])
+        createQB([{ numberOfImages: 12 }])
     );
 
     const storage = new DbStorage();
@@ -62,14 +60,12 @@ describe("ML Engineer – getProjectStats()", () => {
 
 // ======================== getEnrichedAnnotationsByImageIds =========================
 describe("ML Engineer – getEnrichedAnnotationsByImageIds()", () => {
-
   test("returns empty list when no ids", async () => {
     const storage = new DbStorage();
     expect(await storage.getEnrichedAnnotationsByImageIds([])).toEqual([]);
   });
 
   test("returns enriched annotations", async () => {
-
     const rows = [{
       annotationId: "a1",
       imageId: "img1",
@@ -91,9 +87,7 @@ describe("ML Engineer – getEnrichedAnnotationsByImageIds()", () => {
 
 // =========================== getAllProjectsWithManifest ===========================
 describe("ML Engineer – getAllProjectsWithManifest()", () => {
-
   test("returns project manifest including images", async () => {
-
     const projectRows = [{
       id: "p1",
       name: "Project 1",
@@ -113,7 +107,13 @@ describe("ML Engineer – getAllProjectsWithManifest()", () => {
     });
 
     const mockImages = [
-      { id: "img1", filename: "dog.jpg", url: "/i/dog.jpg" }
+      {
+        id: "img1",
+        filename: "dog.jpg",
+        url: "/i/dog.jpg",
+        uploadedAt: new Date("2025-01-01T00:00:00Z"),
+        published: true,
+      },
     ];
 
     const storage = new DbStorage();
@@ -128,7 +128,6 @@ describe("ML Engineer – getAllProjectsWithManifest()", () => {
 
 // ================================ getAllImages ================================
 test("ML Engineer – getAllImages returns images", async () => {
-
   (db.select as any).mockReturnValueOnce({
     from: () => [
       { id: "i1", filename: "dog.jpg" },
@@ -144,9 +143,8 @@ test("ML Engineer – getAllImages returns images", async () => {
 
 // ================================ getImage ================================
 test("ML Engineer – getImage returns single image", async () => {
-
   (db.select as any).mockImplementationOnce(() =>
-    createQB([{ id: "img1", filename: "x.png" }])
+      createQB([{ id: "img1", filename: "x.png" }])
   );
 
   const storage = new DbStorage();
@@ -157,9 +155,8 @@ test("ML Engineer – getImage returns single image", async () => {
 
 // ================================ getAllLabelTypes ================================
 test("ML Engineer – getAllLabelTypes returns list", async () => {
-
   (db.select as any).mockImplementationOnce(() =>
-    createQB([{ id: "lt1", name: "Dogs", classCount: 4 }])
+      createQB([{ id: "lt1", name: "Dogs", classCount: 4 }])
   );
 
   const storage = new DbStorage();
