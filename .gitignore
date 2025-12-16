@@ -12,3 +12,10 @@
 
 # IDE CONFIG
 .idea
+
+# Test coverage
+/coverage
+
+# Logs
+*.log
+npm-debug.log*

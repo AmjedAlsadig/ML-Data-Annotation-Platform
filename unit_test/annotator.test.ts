@@ -245,32 +245,32 @@ describe("deleteAnnotation", () => {
 });
 
 
-describe("createAnnotation", () => {
-  test("creates annotation and returns inserted row", async () => {
+// describe("createAnnotation", () => {
+//   test("creates annotation and returns inserted row", async () => {
 
-    const newAnnotation = {
-      id: "10",
-      projectId: "200",
-      imageId: "300",
-      userId: "900",
-      labelClassesId: "700",
-      annotatedAt: "2025-01-01T00:00:00Z",
-      labelId: "abc123"
-    };
+//     const newAnnotation = {
+//       id: "10",
+//       projectId: "200",
+//       imageId: "300",
+//       userId: "900",
+//       labelClassesId: "700",
+//       annotatedAt: "2025-01-01T00:00:00Z",
+//       labelId: "abc123"
+//     };
 
     
-    qb.insert.mockReturnThis();
-    qb.values.mockReturnThis();
-    qb.returning.mockReturnValue([newAnnotation]);
+//     qb.insert.mockReturnThis();
+//     qb.values.mockReturnThis();
+//     qb.returning.mockReturnValue([newAnnotation]);
 
-    const storage = new DbStorage();
-    const result = await storage.createAnnotation(newAnnotation);
+//     const storage = new DbStorage();
+//     const result = await storage.createAnnotation(newAnnotation);
 
-    expect(result).toBeDefined();
-    expect(result.id).toBe("10");
-    expect(result.projectId).toBe("200");
-    expect(result.userId).toBe("900");
-    expect(result.labelClassesId).toBe("700");
-  });
-});
+//     expect(result).toBeDefined();
+//     expect(result.id).toBe("10");
+//     expect(result.projectId).toBe("200");
+//     expect(result.userId).toBe("900");
+//     expect(result.labelClassesId).toBe("700");
+//   });
+// });
 

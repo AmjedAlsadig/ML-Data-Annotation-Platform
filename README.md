@@ -86,18 +86,26 @@ To run the tests, run the following command:
 npm test
 ```
 
+#### 7. Test Coverage
+
+To generate coverage reports (text, HTML, LCOV for [Codecov](https://codecov.io)):
+```bash
+npm run test:coverage
+```
+View HTML report: [coverage/index.html](file:///Users/vivek/Documents/GitHub/ml-data-platform/coverage/index.html)
+
 ### Swagger URL
 
-The Swagger documentation can be found at [/swagger](http://localhost:3000/swagger).
+The Swagger documentation can be found at (http://localhost:5006/api-docs/).
 
-#### 7. Build for Production
+#### 8. Build for Production
 
 When you are ready to deploy your application, you need to create a production build. This command will bundle and optimize your code into a `dist` directory.
 ```bash
 npm run build
 ```
 
-#### 7. Run in Production Mode
+#### 9. Run in Production Mode
 
 After building the project, you can start it in production mode with this command. This is the command you would use on a live server.
 ```bash

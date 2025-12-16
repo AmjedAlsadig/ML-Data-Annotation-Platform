@@ -4,18 +4,18 @@ import path from "path";
 export default defineConfig({
   test: {
 
-     coverage: {
+    coverage: {
       provider: "v8",
-      reporter: ["text", "html"],   // see coverage summary and HTML report
+      reporter: ["text", "html", "lcov", "json"],   // text/html for local, lcov/json for Codecov
       reportsDirectory: "./coverage"
     },
     globals: true,
-    environment: "jsdom", 
+    environment: "jsdom",
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "frontend/src"),   
-      "@backend": path.resolve(__dirname, "backend"), 
+      "@": path.resolve(__dirname, "frontend/src"),
+      "@backend": path.resolve(__dirname, "backend"),
       "@shared": path.resolve(__dirname, "shared"),
     },
   },
