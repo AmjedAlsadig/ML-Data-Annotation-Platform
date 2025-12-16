@@ -12,6 +12,7 @@ fi
 # 1. Install Dependencies
 echo "Installing dependencies..."
 npm install
+npm run test
 
 # 2. Set Up Environment Variables
 echo "Setting up environment variables..."

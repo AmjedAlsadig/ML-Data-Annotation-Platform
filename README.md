@@ -78,7 +78,19 @@ To start the application for development, which includes features like automatic
 npm run dev
 ```
 
-#### 6. Build for Production
+#### 6. Running tests
+
+To run the tests, run the following command:
+
+```bash
+npm test
+```
+
+### Swagger URL
+
+The Swagger documentation can be found at [/swagger](http://localhost:3000/swagger).
+
+#### 7. Build for Production
 
 When you are ready to deploy your application, you need to create a production build. This command will bundle and optimize your code into a `dist` directory.
 ```bash
