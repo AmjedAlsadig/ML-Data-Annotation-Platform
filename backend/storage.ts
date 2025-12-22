@@ -9,7 +9,7 @@ import {
   projectAssignments, type InsertProjectAssignment, type ProjectAssignment,
   projectImages, type InsertProjectImage, type ProjectImage
 } from "@shared/schema";
-import { eq, and, desc, asc, sql, count, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, count, inArray, gt } from "drizzle-orm";
 
 export interface AnnotationDetailsDTO {
   id: string;
@@ -26,6 +26,10 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserRole(id: string, role: 'annotator' | 'data_specialist' | 'admin' | 'ml_engineer'): Promise<void>;
+
+  saveResetToken(userId: string, token: string, expires: Date): Promise<void>;  
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  updateUserPassword(userId: string, newPasswordHash: string): Promise<void>;
 
   // Project methods
   getProject(id: string): Promise<Project | undefined>;
@@ -145,6 +149,36 @@ export class DbStorage implements IStorage {
   async updateUserRole(id: string, role: 'annotator' | 'data_specialist' | 'admin' | 'ml_engineer'): Promise<void> {
     await db.update(users).set({ role }).where(eq(users.id, id));
   }
+
+  // Rest password
+  async saveResetToken(userId: string, token: string, expires: Date): Promise<void> {
+    await db.update(users)
+      .set({ 
+        resetPasswordToken: token, 
+        resetPasswordExpires: expires 
+      })
+      .where(eq(users.id, userId));
+  }
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users)
+      .where(and(
+        eq(users.resetPasswordToken, token),
+        gt(users.resetPasswordExpires, new Date()) // Check if not expired
+      ));
+    return user;
+  }
+
+  // 3. Update Password and clear token
+  async updateUserPassword(userId: string, newPasswordHash: string): Promise<void> {
+    await db.update(users)
+      .set({ 
+        password: newPasswordHash,
+        resetPasswordToken: null, // Clear token after use
+        resetPasswordExpires: null 
+      })
+      .where(eq(users.id, userId));
+  }
+  
   // Project methods
   async getProject(id: string): Promise<Project | undefined> {
     const [project] = await db.select().from(projects).where(eq(projects.id, id));

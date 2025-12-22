@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { insertUserSchema, insertProjectSchema, insertLabelSchema, insertImageSchema, insertProjectImagesSchema, insertAnnotationSchema, insertLabelClassSchema, insertProjectImageSchema } from "@shared/schema";
 import multer from 'multer';
 import { uploadFile, deleteFile, initializeMinio, getFileStream, getFileMetadata, extractObjectNameFromUrl } from './services/minio';
@@ -15,6 +16,7 @@ import { db } from "./db";
 
 import { authenticateToken, requireRole } from "./middlewares/authorize";
 import { validate } from "./middlewares/validation";
+import { sendResetEmail } from "./services/email";
 
 // Create partial schemas for updates
 const updateLabelSchema = insertLabelSchema.partial();
@@ -260,6 +262,327 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error: any) {
             console.error("Get user error:", error);
             res.status(500).json({ error: "Failed to get user" });
+        }
+    });
+
+
+    /**
+     * @swagger
+     * /api/auth/forgot-password:
+     *   post:
+     *     summary: Request password reset link
+     *     tags: [Auth]
+     *     description: |
+     *       Initiates the password reset process by sending a reset link to the user's email.
+     *       Always returns a success message even if the email doesn't exist (for security).
+     *       
+     *       **Security Note:** This endpoint implements email enumeration protection by 
+     *       returning the same message regardless of whether the email exists.
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - email
+     *             properties:
+     *               email:
+     *                 type: string
+     *                 format: email
+     *                 example: user@example.com
+     *                 description: The email address associated with the account
+     *     responses:
+     *       200:
+     *         description: Password reset link sent (or would be sent if email exists)
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 message:
+     *                   type: string
+     *                   example: "If an account with that email exists, we sent you a link."
+     *       400:
+     *         description: Bad request - missing or invalid email
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Email is required"
+     *       500:
+     *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Server error"
+     *     security: []
+     */
+    app.post("/api/auth/forgot-password", async (req, res) => {
+        try {
+            const { email } = req.body;
+            const user = await storage.getUserByEmail(email);
+
+            if (!user) {
+                console.log("user Not found, User: " + user)
+                return res.json({ message: "If an account with that email exists, we sent you a link." });
+            }
+
+            const token = crypto.randomBytes(20).toString('hex');
+            const expires = new Date(Date.now() + 3600000); 
+
+            await storage.saveResetToken(user.id, token, expires);
+
+            // NEW CODE
+            const link = `http://localhost:5173/api/auth/reset-password?token=${token}`;
+            
+            // Send actual email
+            await sendResetEmail(email, link); 
+            console.log("email: "+email+", Link: "+link);
+            res.json({ message: "If an account with that email exists, we sent you a link." });
+        } catch (error: any) {
+            console.error("Forgot password error:", error);
+            res.status(500).json({ error: "Server error" });
+        }
+    });
+
+
+    /**
+     * @swagger
+     * /api/auth/reset-password:
+     *   post:
+     *     summary: Reset user password
+     *     tags: [Auth]
+     *     description: |
+     *       Resets the user's password using a valid reset token.
+     *       The token is typically sent via email after using the forgot-password endpoint.
+     *       
+     *       **Security Features:**
+     *       - Token expires after 1 hour
+     *       - Token is single-use (cleared after successful reset)
+     *       - Password is securely hashed before storage
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - token
+     *               - newPassword
+     *             properties:
+     *               token:
+     *                 type: string
+     *                 example: "a1b2c3d4e5f6g7h8i9j0"
+     *                 description: The password reset token received via email
+     *               newPassword:
+     *                 type: string
+     *                 format: password
+     *                 example: "NewSecurePassword123!"
+     *                 description: The new password (minimum 8 characters recommended)
+     *                 minLength: 8
+     *     responses:
+     *       200:
+     *         description: Password successfully reset
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 message:
+     *                   type: string
+     *                   example: "Password has been updated."
+     *       400:
+     *         description: Invalid or expired reset token
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Password reset token is invalid or has expired."
+     *       422:
+     *         description: Password validation failed
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Password must be at least 8 characters long"
+     *       500:
+     *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Server error"
+     *     security: []
+     */
+    app.post("/api/auth/reset-password", async (req, res) => {
+        try {
+            const { token, newPassword } = req.body;
+
+            const user = await storage.getUserByResetToken(token);
+
+            if (!user) {
+                return res.status(400).json({ error: "Password reset token is invalid or has expired." });
+            }
+
+            // Hash new password
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+            // Update password and clear token
+            await storage.updateUserPassword(user.id, hashedPassword);
+
+            res.json({ message: "Password has been updated." });
+        } catch (error: any) {
+            console.error("Reset password error:", error);
+            res.status(500).json({ error: "Server error" });
+        }
+    });
+
+    /**
+     * @swagger
+     * /api/auth/change-password:
+     *   post:
+     *     summary: Change user password
+     *     tags: [Auth]
+     *     description: |
+     *       Allows an authenticated user to change their password by providing their current password.
+     *       
+     *       **Security Features:**
+     *       - Requires user authentication via JWT/session
+     *       - Verifies current password before allowing change
+     *       - Validates new password meets security requirements
+     *     
+     *     security:
+     *       - BearerAuth: []
+     *       - SessionAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - currentPassword
+     *               - newPassword
+     *             properties:
+     *               currentPassword:
+     *                 type: string
+     *                 format: password
+     *                 example: "OldPassword123!"
+     *                 description: The user's current password
+     *               newPassword:
+     *                 type: string
+     *                 format: password
+     *                 example: "NewSecurePassword456!"
+     *                 description: The new password (minimum 6 characters)
+     *                 minLength: 6
+     *     responses:
+     *       200:
+     *         description: Password successfully changed
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *                 message:
+     *                   type: string
+     *                   example: "Password updated successfully"
+     *       400:
+     *         description: Bad request - validation error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   oneOf:
+     *                     - example: "Current and new passwords are required"
+     *                     - example: "New password must be at least 6 characters"
+     *       401:
+     *         description: Unauthorized - authentication required
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   oneOf:
+     *                     - example: "Not authenticated"
+     *                     - example: "Incorrect current password"
+     *       404:
+     *         description: User not found
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "User not found"
+     *       500:
+     *         description: Internal server error
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 error:
+     *                   type: string
+     *                   example: "Failed to update password"
+     */
+    app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
+        try {
+            const userId = req.session?.userId;
+            if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+            const { currentPassword, newPassword } = req.body;
+
+            if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Current and new passwords are required" });
+            }
+
+            if (newPassword.length < 6) {
+            return res.status(400).json({ error: "New password must be at least 6 characters" });
+            }
+
+            const user = await storage.getUser(userId);
+            if (!user) return res.status(404).json({ error: "User not found" });
+
+            const isValid = await bcrypt.compare(currentPassword, user.password);
+            if (!isValid) {
+            return res.status(401).json({ error: "Incorrect current password" });
+            }
+
+            const newHashedPassword = await bcrypt.hash(newPassword, 10);
+
+            await storage.updateUserPassword(userId, newHashedPassword);
+
+            res.json({ success: true, message: "Password updated successfully" });
+
+        } catch (error: any) {
+            console.error("Change password error:", error);
+            res.status(500).json({ error: "Failed to update password" });
         }
     });
 
