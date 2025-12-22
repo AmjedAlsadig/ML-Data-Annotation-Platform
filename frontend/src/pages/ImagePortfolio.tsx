@@ -1,11 +1,30 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useRouter } from 'wouter';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LogOut, ArrowLeft, Image as ImageIcon, Folder, TrendingUp, Filter } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  LogOut,
+  ArrowLeft,
+  Image as ImageIcon,
+  Folder,
+  TrendingUp,
+  Filter,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PortfolioImageCard } from '@/components/PortfolioImageCard';
@@ -31,7 +50,6 @@ export default function ImagePortfolio() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
-  const [images, setImages] = useState<any[]>([]);
 
   const {
     data,
@@ -45,22 +63,6 @@ export default function ImagePortfolio() {
 
   useEffect(() => {
     loadUserData();
-
-    const fetchImages = async () => {
-      try{
-
-        const res = await fetch('/api/images');
-        const imagesData = await res.json();
-        setImages(imagesData);
-      }catch(err){
-        toast({
-          title: 'Error',
-          description: 'Failed to load user data.',
-          variant: 'destructive',
-        });
-      }
-    }
-    fetchImages();  
   }, []);
 
   const loadUserData = async () => {
@@ -68,7 +70,6 @@ export default function ImagePortfolio() {
       setIsUserLoading(true);
       setUserError(null);
 
-      // Fetch current user
       const token = localStorage.getItem('authToken');
       if (!token) {
         setLocation('/login');
@@ -76,9 +77,7 @@ export default function ImagePortfolio() {
       }
 
       const userResponse = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!userResponse.ok) {
@@ -95,35 +94,20 @@ export default function ImagePortfolio() {
 
       setUser(userData);
 
-      try{      
-        const res = await fetch('/api/images', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          }, 
-        });
-        const imagesData = await res.json();
-        setImages(imagesData);
-      }catch(err){
-        toast({
-          title: 'Error',
-          description: 'Failed to load user data.',
-          variant: 'destructive',
-        });
-      }
-    
-      // Fetch projects for filter dropdown
       const projectsResponse = await fetch('/api/projects', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (projectsResponse.ok) {
-        const projectsData = await projectsResponse.json();
-        setProjects(projectsData);
+        setProjects(await projectsResponse.json());
       }
     } catch (err: any) {
       setUserError(err.message || 'Failed to load data');
+      toast({
+        title: 'Error',
+        description: 'Failed to load user data.',
+        variant: 'destructive',
+      });
     } finally {
       setIsUserLoading(false);
     }
@@ -134,9 +118,7 @@ export default function ImagePortfolio() {
     if (token) {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
     }
     localStorage.removeItem('authToken');
@@ -148,36 +130,25 @@ export default function ImagePortfolio() {
   };
 
   const handleDeleteImage = async (imageId: string) => {
-    if (!confirm('Are you sure you want to delete this image?')) {
-      return;
-    }
-
-    try {
-      await deleteImage(imageId);
-    } catch (error) {
-      // Error is handled by the hook
-    }
+    if (!confirm('Are you sure you want to delete this image?')) return;
+    await deleteImage(imageId);
   };
 
-  const getUserInitials = (name: string) => {
-    return name
+  const getUserInitials = (name: string) =>
+    name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  };
 
   const isLoading = isUserLoading || isPortfolioLoading;
   const error = userError || portfolioError;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-sm text-muted-foreground">Loading portfolio...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-12 w-12 border-b-2 border-primary" />
       </div>
     );
   }
@@ -185,206 +156,111 @@ export default function ImagePortfolio() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" className="text-primary-foreground" />
-                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
-              </svg>
-            </div>
-            <span className="text-lg font-semibold">VT-Annotator</span>
-          </div>
+          <span className="font-semibold">VT-Annotator</span>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground hidden sm:inline">Hello</span>
-              <span className="text-sm font-medium">{user?.name}</span>
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {user ? getUserInitials(user.name) : 'DS'}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              data-testid="button-logout"
-            >
+          <div className="flex items-center gap-3">
+            <span>{user?.name}</span>
+            <Avatar className="w-8 h-8">
+              <AvatarFallback>
+                {user ? getUserInitials(user.name) : 'DS'}
+              </AvatarFallback>
+            </Avatar>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Back Button & Title */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                onClick={() => setLocation('/specialist/dashboard')}
-                className="gap-2"
-                data-testid="button-back"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Dashboard
-              </Button>
-            </div>
-          </div>
+      <main className="container mx-auto px-4 py-8 space-y-8">
+        <Button
+          variant="ghost"
+          onClick={() => setLocation('/specialist/dashboard')}
+          className="gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Button>
 
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {/* Portfolio Header */}
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Image Portfolio</h1>
-            <p className="text-muted-foreground">Browse and manage all your images across all projects</p>
-          </div>
+        {/* Filters */}
+        <div className="flex flex-wrap gap-4 items-center">
+          <Filter className="w-4 h-4" />
 
-          {/* Stats Cards */}
-          {data?.stats && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-sm font-medium">Total Images</CardDescription>
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{data.stats.totalImages}</div>
-                </CardContent>
-              </Card>
+          {/* PROJECT FILTER */}
+          <Select
+            value={filters.projectId || 'all'}
+            onValueChange={(v) =>
+              updateFilters({ projectId: v === 'all' ? undefined : v })
+            }
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All Projects" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Projects</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-sm font-medium">Projects</CardDescription>
-                    <Folder className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{data.stats.totalProjects}</div>
-                </CardContent>
-              </Card>
+          {/* SORT FILTER (STAROST / NAZIV) */}
+          <Select
+            value={`${filters.sortBy}-${filters.sortOrder}`}
+            onValueChange={(value) => {
+              const [sortBy, sortOrder] = value.split('-') as any;
+              updateFilters({ sortBy, sortOrder });
+            }}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="uploadedAt-desc">Newest First</SelectItem>
+              <SelectItem value="uploadedAt-asc">Oldest First</SelectItem>
+              <SelectItem value="projectName-asc">Project A–Z</SelectItem>
+              <SelectItem value="projectName-desc">Project Z–A</SelectItem>
+            </SelectContent>
+          </Select>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-sm font-medium">Annotated Images</CardDescription>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{data.stats.annotatedImages}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {data.stats.totalImages > 0
-                      ? `${Math.round((data.stats.annotatedImages / data.stats.totalImages) * 100)}%`
-                      : '0%'} complete
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Filter Controls */}
-          {/* <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Filters:</span>
-              </div>
-
-              <Select
-                value={filters.projectId || 'all'}
-                onValueChange={(value) => updateFilters({ projectId: value === 'all' ? undefined : value })}
-              >
-                <SelectTrigger className="w-[200px]" data-testid="select-project-filter">
-                  <SelectValue placeholder="All Projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={`${filters.sortBy}-${filters.sortOrder}`}
-                onValueChange={(value) => {
-                  const [sortBy, sortOrder] = value.split('-') as ['uploadedAt' | 'projectName', 'asc' | 'desc'];
-                  updateFilters({ sortBy, sortOrder });
-                }}
-              >
-                <SelectTrigger className="w-[180px]" data-testid="select-sort">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="uploadedAt-desc">Newest First</SelectItem>
-                  <SelectItem value="uploadedAt-asc">Oldest First</SelectItem>
-                  <SelectItem value="projectName-asc">By Project Name</SelectItem>
-                  <SelectItem value="projectName-desc">By Project Name (Z-A)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Badge variant="outline" className="text-sm">
-              {data?.total || 0} total images
-            </Badge>
-          </div> */}
-
-          {/* Gallery Section */}
-          <div className="space-y-4">
-            {images.length === 0 ? (
-              <Card className="p-12 text-center">
-                <CardContent>
-                  <ImageIcon className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <CardTitle className="text-xl">No Images Found</CardTitle>
-                  <CardDescription className="mt-2">
-                    Adjust your filters or upload new images to your portfolio.
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {images.map((image) => (
-                  <PortfolioImageCard
-                    key={image.id}
-                    image={image}
-                    onDelete={handleDeleteImage}
-                    onNavigateToProject={handleNavigateToProject}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Load More Button */}
-            {data && data.images.length < data.total && (
-              <div className="text-center pt-4">
-                <Button
-                  variant="outline"
-                  onClick={loadMore}
-                  disabled={isPortfolioLoading}
-                  data-testid="button-load-more"
-                >
-                  {isPortfolioLoading ? 'Loading...' : 'Load More'}
-                </Button>
-              </div>
-            )}
-          </div>
+          <Badge variant="outline">{data?.total || 0} images</Badge>
         </div>
+
+        {/* Gallery */}
+        {data?.images.length === 0 ? (
+          <Card className="p-12 text-center">
+            <CardTitle>No Images Found</CardTitle>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-4">
+            {data?.images.map((image) => (
+              <PortfolioImageCard
+                key={image.id}
+                image={image}
+                onDelete={handleDeleteImage}
+                onNavigateToProject={handleNavigateToProject}
+              />
+            ))}
+          </div>
+        )}
+
+        {data && data.images.length < data.total && (
+          <div className="text-center">
+            <Button variant="outline" onClick={loadMore}>
+              Load More
+            </Button>
+          </div>
+        )}
       </main>
     </div>
   );
