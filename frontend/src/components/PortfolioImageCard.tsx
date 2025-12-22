@@ -64,6 +64,26 @@ export function PortfolioImageCard({
           <p className="text-sm font-medium truncate" title={filename}>
             {filename}
           </p>
+          <div className="flex items-center justify-between">
+            <button
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+              onClick={handleProjectClick}
+              data-testid={`link-project-${projectId}`}
+            >
+              <span className="truncate max-w-[120px]">{projectName}</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            </button>
+            <Badge
+              variant={isAnnotated ? "default" : "secondary"}
+              className="text-xs"
+              data-testid={`badge-annotation-${isAnnotated ? 'annotated' : 'pending'}`}
+            >
+              {isAnnotated ? 'Annotated' : 'Pending'}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {new Date(uploadedAt).toLocaleDateString()}
+          </p>
         </div>
       </CardContent>
     </Card>
