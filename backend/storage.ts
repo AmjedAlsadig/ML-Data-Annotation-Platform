@@ -197,6 +197,7 @@ async getUserByEmail(email: string): Promise<User> {
 
   }
 
+  // ======= ADMIN =========
   async getAllUsers(): Promise<User[]> {
   try {
     return await db.select().from(users);
@@ -227,36 +228,97 @@ async getUserByEmail(email: string): Promise<User> {
 
   }
 
-  // Rest password
+  // ====== end ADMIN =========
+
+
+  // Rest password --> todo:  test in user.test.ts
   async saveResetToken(userId: string, token: string, expires: Date): Promise<void> {
-    await db.update(users)
-      .set({ 
-        resetPasswordToken: token, 
-        resetPasswordExpires: expires 
-      })
-      .where(eq(users.id, userId));
+     if (!userId || typeof userId !== "string") {
+    throw new Error("Invalid user id");
   }
-  async getUserByResetToken(token: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users)
-      .where(and(
-        eq(users.resetPasswordToken, token),
-        gt(users.resetPasswordExpires, new Date()) // Check if not expired
-      ));
-    return user;
+  if (!token || typeof token !== "string") {
+    throw new Error("Invalid reset token");
+  }
+  if (!(expires instanceof Date) || isNaN(expires.getTime())) {
+    throw new Error("Invalid expiration date");
   }
 
-  // 3. Update Password and clear token
-  async updateUserPassword(userId: string, newPasswordHash: string): Promise<void> {
-    await db.update(users)
-      .set({ 
-        password: newPasswordHash,
-        resetPasswordToken: null, // Clear token after use
-        resetPasswordExpires: null 
+  let result: unknown;
+
+  try {
+    result = await db.update(users)
+      .set({
+        resetPasswordToken: token,
+        resetPasswordExpires: expires,
       })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, userId))
+      .execute();
+  } catch {
+    throw new Error("Failed to save reset token");
   }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("User not found");
+  }
+  }
+
+  // todo: user.test.ts
+  async getUserByResetToken(token: string): Promise<User> {
+  if (!token || typeof token !== "string") {
+    throw new Error("Invalid reset token");
+  }
+
+  let user: User | undefined;
+
+  try {
+    [user] = await db.select().from(users)
+      .where(and(
+        eq(users.resetPasswordToken, token),
+        gt(users.resetPasswordExpires, new Date())
+      ));
+  } catch {
+    throw new Error("Failed to fetch user by reset token");
+  }
+
+  if (!user) {
+    throw new Error("Reset token not found or expired");
+  }
+
+  return user;
+}
+
+
+  // 3. Update Password and clear token
+ async updateUserPassword(userId: string, newPasswordHash: string): Promise<void> {
+  if (!userId || typeof userId !== "string") {
+    throw new Error("Invalid user id");
+  }
+  if (!newPasswordHash || typeof newPasswordHash !== "string") {
+    throw new Error("Invalid password hash");
+  }
+
+  let result: unknown;
+
+  try {
+    result = await db.update(users)
+      .set({
+        password: newPasswordHash,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      })
+      .where(eq(users.id, userId))
+      .execute();
+  } catch {
+    throw new Error("Failed to update user password");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("User not found");
+  }
+}
+
   
-  // Project methods
+  // Project methods == testing in storage-basic.test.ts
   async getProject(id: string): Promise<Project | undefined> {
     const [project] = await db.select().from(projects).where(eq(projects.id, id));
     return project;
@@ -305,25 +367,6 @@ async getUserByEmail(email: string): Promise<User> {
   async updateProjectStatus(id: string, status: "not_started" | "in_progress" | "completed"): Promise<void> {
     await db.update(projects).set({ status }).where(eq(projects.id, id));
   }
-
-  // async getProjectProgress(projectId: string): Promise<{ totalImages: number, annotatedImages: number }> {
-  //   // const totalImages = await db.select().from(images).where(eq(images.projectId, projectId));
-  //   const annotatedImages = await db
-  //       .selectDistinct({ id: images.id })
-  //       .from(images)
-  //       .innerJoin(annotations, eq(images.id, annotations.imageId))
-  //       .where(eq(images.projectId, projectId));
-
-  //   return {
-  //     // totalImages: totalImages.length,
-  //     annotatedImages: annotatedImages.length,
-  //   };
-  // }
-
-  // Label methods
-  // async getLabelsByProject(projectId: string): Promise<Label[]> {
-  //   return await db.select().from(labels).where(eq(labels.projectId, projectId));
-  // }
 
   async assignImagesToProject(projectId: string, imageIds: string[]): Promise<ProjectImage[]> {
     if (imageIds.length === 0) return [];
@@ -524,30 +567,6 @@ async getUserByEmail(email: string): Promise<User> {
   async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
     return await db.select().from(annotations).where(eq(annotations.userId, userId));
   }
-
-  // async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> {
-  //   // Validate that the label and image belong to the same project
-  //   const [image] = await db.select().from(images).where(eq(images.id, insertAnnotation.imageId));
-  //   const [label] = await db.select().from(labels).where(eq(labels.id, insertAnnotation.labelId));
-
-  //   if (!image) {
-  //     throw new Error(`Image with id ${insertAnnotation.imageId} not found`);
-  //   }
-
-  //   if (!label) {
-  //     throw new Error(`Label with id ${insertAnnotation.labelId} not found`);
-  //   }
-
-  //   if (image.projectId !== label.projectId) {
-  //     throw new Error(
-  //         `Label and image must belong to the same project. ` +
-  //         `Image project: ${image.projectId}, Label project: ${label.projectId}`
-  //     );
-  //   }
-
-  //   const [annotation] = await db.insert(annotations).values(insertAnnotation).returning();
-  //   return annotation;
-  // }
 
 
   async createAnnotation(insertAnnotation: InsertAnnotation): Promise<Annotation> {
