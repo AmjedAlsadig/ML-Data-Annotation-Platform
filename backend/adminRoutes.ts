@@ -8,12 +8,12 @@ const requireAdmin = async (req: any, res: any, next: any) => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
+      return res.status(401).json({ success: false, error: "Not authenticated" });
     }
 
     const user = await storage.getUser(userId);
     if (!user || user.role !== 'admin') {
-      return res.status(403).json({ error: "Access denied. Admin privileges required." });
+      return res.status(403).json({ success: false, error: "Access denied. Admin privileges required." });
     }
 
     // Attach user to request for use in route handlers
@@ -21,7 +21,7 @@ const requireAdmin = async (req: any, res: any, next: any) => {
     next();
   } catch (error: any) {
     console.error("Admin auth error:", error);
-    res.status(500).json({ error: "Authentication failed" });
+    res.status(500).json({ success: false, error: "Authentication failed" });
   }
 };
 
@@ -43,14 +43,14 @@ export function registerAdminRoutes(app: Express) {
   app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const users = await storage.getAllUsers();
-      
+
       // Remove passwords from response
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);
-      
+
       res.json(usersWithoutPasswords);
     } catch (error: any) {
       console.error("Get all users error:", error);
-      res.status(500).json({ error: "Failed to retrieve users" });
+      res.status(500).json({ success: false, error: "Failed to retrieve users" });
     }
   });
 
@@ -96,28 +96,29 @@ export function registerAdminRoutes(app: Express) {
       // Validate role
       const validRoles = ['annotator', 'data_specialist', 'admin', 'ml_engineer'];
       if (!role || !validRoles.includes(role)) {
-        return res.status(400).json({ 
-          error: "Invalid role. Must be one of: annotator, data_specialist, admin, ml_engineer" 
+        return res.status(400).json({
+          success: false,
+          error: "Invalid role. Must be one of: annotator, data_specialist, admin, ml_engineer"
         });
       }
 
       // Check if user exists
       const userToUpdate = await storage.getUser(userIdToUpdate);
       if (!userToUpdate) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ success: false, error: "User not found" });
       }
 
       // Update the role
       await storage.updateUserRole(userIdToUpdate, role);
 
-      res.json({ 
+      res.json({
         message: "User role updated successfully",
         userId: userIdToUpdate,
         newRole: role
       });
     } catch (error: any) {
       console.error("Update user role error:", error);
-      res.status(500).json({ error: "Failed to update user role" });
+      res.status(500).json({ success: false, error: "Failed to update user role" });
     }
   });
 
@@ -150,8 +151,9 @@ export function registerAdminRoutes(app: Express) {
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(data.email);
       if (existingUser) {
-        return res.status(400).json({ 
-          error: "User with this email already exists" 
+        return res.status(400).json({
+          success: false,
+          error: "User with this email already exists"
         });
       }
 
@@ -166,15 +168,16 @@ export function registerAdminRoutes(app: Express) {
 
       // Don't send password back
       const { password, ...userWithoutPassword } = user;
-      
+
       res.json({
         message: "User created successfully",
         user: userWithoutPassword
       });
     } catch (error: any) {
       console.error("Create user error:", error);
-      res.status(400).json({ 
-        error: error.message || "Failed to create user" 
+      res.status(400).json({
+        success: false,
+        error: error.message || "Failed to create user"
       });
     }
   });
