@@ -13,6 +13,7 @@ export default function Login() {
     email: '',
     password: ''
   });
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -70,6 +71,12 @@ export default function Login() {
               </Alert>
           )}
 
+          {forgotPasswordMessage && (
+          <Alert variant="default">
+          <AlertDescription>{forgotPasswordMessage}</AlertDescription>
+          </Alert>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-medium">Email</Label>
             <div className="relative">
@@ -108,7 +115,37 @@ export default function Login() {
               <button
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground"
-                  disabled={isLoading}
+                  disabled={isLoading || !formData.email}
+                  onClick={async () => {
+                    setError(null);
+                    setForgotPasswordMessage(null);
+
+                    if (!formData.email) {
+                      setError("Please enter your email first.");
+                      return;
+                    }
+
+                    setIsLoading(true);
+                    try {
+                      const response = await fetch("/api/auth/forgot-password", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: formData.email }),
+                      });
+
+                      const data = await response.json();
+
+                      if (!response.ok) {
+                        throw new Error(data.error || "Failed to send reset email");
+                      }
+
+                      setForgotPasswordMessage("Check your email for the reset link.");
+                    } catch (err: any) {
+                      setError(err.message || "An error occurred while sending reset email.");
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
                   data-testid="link-forgot-password"
               >
                 Forgot your password?

@@ -112,7 +112,9 @@ export default function ImageDetails() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
+              onClick={() => setLocation('/profile')}>
               <span className="text-sm text-muted-foreground hidden sm:inline">Hello</span>
               <span className="text-sm font-medium">{user?.name}</span>
               <Avatar className="w-8 h-8">

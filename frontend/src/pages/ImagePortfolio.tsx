@@ -160,7 +160,9 @@ export default function ImagePortfolio() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <span className="font-semibold">VT-Annotator</span>
 
-          <div className="flex items-center gap-3">
+          <div
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
+            onClick={() => setLocation('/profile')}>
             <span>{user?.name}</span>
             <Avatar className="w-8 h-8">
               <AvatarFallback>

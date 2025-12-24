@@ -14,6 +14,8 @@ import ImagePortfolio from "@/pages/ImagePortfolio";
 import CreateAccount from "@/pages/CreateAccount";
 import AssignRole from "@/pages/AssignRole";
 import ImageDetails from "@/pages/ImageDetails";
+import ResetPassword from "@/pages/ResetPassword";
+import UserProfile from "@/pages/UserProfile";
 
 function Router() {
   return (
@@ -30,7 +32,10 @@ function Router() {
       <Route path="/admin/create-account" component={CreateAccount} />
       <Route path="/admin/assign-role" component={AssignRole} />
       <Route path="/admin/dashboard" component={() => <Redirect to="/admin/assign-role" />} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/profile" component={UserProfile} />
       <Route component={NotFound} />
+
     </Switch>
   );
 }

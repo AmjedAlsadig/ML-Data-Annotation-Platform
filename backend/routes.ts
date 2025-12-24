@@ -340,8 +340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             await storage.saveResetToken(user.id, token, expires);
 
-            // NEW CODE
-            const link = `http://localhost:5173/api/auth/reset-password?token=${token}`;
+            const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+            const link = `${frontendUrl}/reset-password?token=${token}`;
             
             // Send actual email
             await sendResetEmail(email, link); 
