@@ -2040,6 +2040,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     /**
      * @swagger
+     * /api/ML-Engineer/images/published:
+     *   get:
+     *     summary: Get only published images (ready for ML training)
+     *     tags: [ML Engineer]
+     *     security:
+     *       - bearerAuth: []
+     *     responses:
+     *       200:
+     *         description: List of published images only
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                 count:
+     *                   type: integer
+     *                 data:
+     *                   type: array
+     *       401:
+     *         $ref: '#/components/responses/UnauthorizedError'
+     *       403:
+     *         description: Access denied
+     *       500:
+     *         description: Server error
+     */
+    app.get("/api/ML-Engineer/images/published", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+        try {
+            const allImages = await storage.getAllImagesWithPublishStatus();
+            // Filter to only published images
+            const publishedImages = allImages.filter(img => img.published === true);
+            res.json({
+                success: true,
+                count: publishedImages.length,
+                data: publishedImages
+            });
+        } catch (error: any) {
+            console.error("ML: Get published images error:", error);
+            res.status(500).json({ success: false, error: "Failed to get published images" });
+        }
+    });
+
+    /**
+     * @swagger
      * /api/ML-Engineer/{id}/download:
      *   get:
      *     summary: Download the actual binary image file
