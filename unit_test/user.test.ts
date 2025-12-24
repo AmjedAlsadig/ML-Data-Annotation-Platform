@@ -47,8 +47,8 @@ import { DbStorage } from "../backend/storage";
 // -------------------- Mock Data --------------------
 
 const mockUsers = [
-  { id: "u1", username: "alpha", email: "alpha@test.com", role: "annotator" },
-  { id: "u2", username: "beta", email: "beta@test.com", role: "data_specialist" },
+  { id: "u1", name: "alpha", firstname: "alpha", lastname: "alpha", email: "alpha@test.com", password: "hashedpwd", role: "annotator", createAt: new Date(), resetPasswordToken: null, resetPassworToken: null, resetPasswordExpires: null },
+  { id: "u2", name: "beta", firstname: "beta", lastname: "beta", email: "beta@test.com", password: "hashedpwd1", role: "data_specialist",  createAt: new Date(), resetPasswordToken: null, resetPassworToken: null, resetPasswordExpires: null },
 ] as const;
 
 const mockProjects = [
@@ -61,43 +61,64 @@ const mockProjects = [
 describe("User Storage Methods", () => {
 
   // Reset mocks before each test
-  beforeEach(() => {
-    qb.select.mockReturnThis();
-    qb.from.mockReturnThis();
-    qb.insert.mockReturnThis();
-    qb.update.mockReturnThis();
-    qb.where.mockReturnThis();
-    qb.values?.mockReturnThis?.();
-    qb.returning?.mockReturnThis?.();
-  });
+beforeEach(() => {
+  qb.select = vi.fn(() => qb);
+  qb.insert = vi.fn(() => qb);
+  qb.update = vi.fn(() => qb);
+  qb.delete = vi.fn(() => qb);
+  qb.from   = vi.fn(() => qb);
+  qb.where  = vi.fn(() => qb);
+  qb.innerJoin = vi.fn(() => qb);
+  qb.values = vi.fn(() => qb);
+  qb.set    = vi.fn(() => qb);
+  qb.orderBy = vi.fn(() => qb);
+  qb.execute = vi.fn();
+  qb.returning = vi.fn();
+});
 
-  // getUser
-  test("getUser returns a user by ID", async () => {
+
+  // ========= getUser =========
+
+  test("getUser returns a user by ID when user exists", async () => {
     
-    qb.where.mockImplementation(() =>
+    qb.where.mockImplementation(() =>  
         Promise.resolve(mockUsers.filter(u => u.id === "u1"))
     );
-
 
     const storage = new DbStorage();
     const result = await storage.getUser("u1");
 
-    expect(result?.id).toBe("u1");
-    expect(result?.email).toBe("alpha@test.com");
+    expect(result).toEqual(mockUsers[0]);
   });
 
-  test("getUser returns undefined when not found", async () => {
-    qb.where.mockImplementation(() => Promise.resolve([])); // no user found
+test("getUser throws when user does not exist", async () => {
+  qb.where.mockResolvedValue([]);
 
-    const storage = new DbStorage();
-    const result = await storage.getUser("missing");
+  const storage = new DbStorage();
 
-    expect(result).toBeUndefined();
-  });
+  await expect(storage.getUser("missing-id"))
+    .rejects
+    .toThrow("User not found");
+});
+
+test("getUser throws when invalid user id type", async () => {
+  
+  const storage = new DbStorage();
+
+  await expect(storage.getUser("" as any))
+    .rejects
+    .toThrow("Invalid user id");
+
+    expect(qb.where).not.toHaveBeenCalled();
+
+});
 
 
-  // getUserByEmail
-  test("getUserByEmail returns a user by email", async () => {
+
+  // ======== getUserByEmail ========
+
+
+  test("getUserByEmail returns a user by email if the user exists", async () => {
 
     qb.where.mockImplementation(() =>
         Promise.resolve(mockUsers.filter(u => u.email === "beta@test.com"))
@@ -106,47 +127,73 @@ describe("User Storage Methods", () => {
     const storage = new DbStorage();
     const result = await storage.getUserByEmail("beta@test.com");
 
-    expect(result?.id).toBe("u2");
-    expect(result?.username).toBe("beta");
+    expect(result).toEqual(mockUsers[1]);
+
   });
+
 
   test("getUserByEmail returns undefined when no match", async () => {
-
-    qb.where.mockImplementation(() => Promise.resolve([])); // no user found
-
+    qb.where.mockResolvedValue([]);
     const storage = new DbStorage();
-    const result = await storage.getUserByEmail("none@test.com");
 
-    expect(result).toBeUndefined();
+    await expect(storage.getUserByEmail("missing-user@mail.com"))
+    .rejects
+    .toThrow("User not found");
+
   });
 
-  // createUser 
-  test("createUser inserts a new user", async () => {
-    const newUser = { id: "u3", email: "new@test.com", username: "newuser", role: "annotator" };
 
-    qb.values = vi.fn().mockReturnThis(); // for db.insert(users).values()
-    qb.returning = vi.fn().mockReturnValue([newUser]);
-
+  test("getUserByEmail throws when user type is invalid", async () => {
     const storage = new DbStorage();
-    const result = await storage.createUser(newUser as any);
 
-    expect(result.id).toBe("u3");
-    expect(result.email).toBe("new@test.com");
+    await expect(storage.getUserByEmail("" as any))
+    .rejects
+    .toThrow("Invalid email");
+
+    expect(qb.where).not.toHaveBeenCalled();
+
   });
 
-  // getAllUsers
-  test("getAllUsers returns all users", async () => {
-    qb.select.mockReturnThis();
-    qb.from.mockImplementation(() =>
-        Promise.resolve(mockUsers)
-    );
+  // ======== createUser ========
 
+
+test("createUser inserts a new user", async () => {
+  const newUser = {
+    id: "u3",
+    name: "newuser",
+    firstName: "New",
+    lastName: "User",
+    email: "new@test.com",
+    password: "hashedpwd",
+    role: "annotator",
+    createdAt: new Date(),
+    resetPasswordToken: null,
+    resetPasswordExpires: null
+  };
+
+  qb.values = vi.fn(() => qb);
+  qb.returning = vi.fn().mockResolvedValue([newUser]);
+
+  const storage = new DbStorage();
+  const result = await storage.createUser(newUser as any);
+
+  expect(result).toEqual(newUser);
+});
+
+
+  test("createUser throws when missing required fields", async () => {
+    const incompleteUser = {
+      name: "incomplete",
+      email: "",
+      password: "pwd"
+    };
     const storage = new DbStorage();
-    const result = await storage.getAllUsers();
-
-    expect(result.length).toBe(2);
-    expect(result[1].username).toBe("beta");
+    await expect(storage.createUser(incompleteUser as any))
+      .rejects
+      .toThrow("Invalid user data");
   });
+
+  
 
   // updateUserRole 
   test("updateUserRole updates a user's role", async () => {

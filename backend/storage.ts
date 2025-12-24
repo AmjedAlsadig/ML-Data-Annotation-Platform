@@ -126,28 +126,105 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
+
   // User methods
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+
+async getUser(id: string): Promise<User> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid user id");
   }
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+  let user: User | undefined;
+
+  try {
+    [user] = await db.select().from(users).where(eq(users.id, id));
+  } catch {
+    throw new Error("Failed to fetch user");
   }
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return user;
+}
+
+
+async getUserByEmail(email: string): Promise<User> {
+  if (!email || typeof email !== "string") {
+    throw new Error("Invalid email");
+  }
+
+  let user: User | undefined;
+
+  try {
+    [user] = await db.select().from(users).where(eq(users.email, email));
+  } catch {
+    throw new Error("Failed to fetch user by email");
+  }
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return user;
+}
+
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+
+    if(!insertUser?.email || !insertUser?.password || !insertUser?.name || !insertUser?.role
+       || !insertUser?.firstName || !insertUser?.lastName
+    ){
+
+      throw new Error("Invalid user data");
+
+    }
+
+    let user: User | undefined;
+
+    try{
+    [user] = await db.insert(users).values(insertUser).returning();
+    } catch {
+      throw new Error("Failed to create user");
+    }
+
+    if (!user) {
+      throw new Error("User creation failed");
+    }
+
     return user;
+
   }
 
   async getAllUsers(): Promise<User[]> {
+  try {
     return await db.select().from(users);
+  } catch {
+    throw new Error("Failed to fetch users");
   }
+}
 
   async updateUserRole(id: string, role: 'annotator' | 'data_specialist' | 'admin' | 'ml_engineer'): Promise<void> {
-    await db.update(users).set({ role }).where(eq(users.id, id));
+     if (!id || typeof id !== "string") {
+    throw new Error("Invalid user id");
+  }
+
+  let result: unknown;
+
+  try {
+    result = await db.update(users)
+      .set({ role })
+      .where(eq(users.id, id))
+      .execute();
+  } catch {
+    throw new Error("Failed to update user role");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("User not found");
+  }
+
   }
 
   // Rest password
