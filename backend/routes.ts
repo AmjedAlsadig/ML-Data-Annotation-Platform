@@ -2026,7 +2026,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.get("/api/ML-Engineer/images", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
         try {
-            const allImages = await storage.getAllImages();
+            const allImages = await storage.getAllImagesWithPublishStatus();
             res.json({
                 success: true,
                 count: allImages?.length || 0,
@@ -2139,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     /**
      * @swagger
      * /api/ML-Engineer/images/labels:
-     *   post:
+     *   get:
      *     summary: Get ground truth labels for a list of images (Bulk)
      *     tags: [ML Engineer]
      *     security:
@@ -2167,12 +2167,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *             schema:
      *               $ref: '#/components/schemas/SuccessResponse'
      */
-    app.post("/api/ML-Engineer/images/labels/", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    app.get("/api/ML-Engineer/images/labels", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
         try {
             const { imageIds } = req.body;
 
-            if (!Array.isArray(imageIds)) {
-                return res.status(400).json({ success: false, error: "imageIds must be an array" });
+            if (!imageIds || !Array.isArray(imageIds)) {
+                return res.status(400).json({ success: false, error: "imageIds must be an array in the request body" });
+            }
+
+            if (imageIds.length === 0) {
+                return res.status(400).json({ success: false, error: "At least one imageId is required" });
             }
 
             const annotations = await storage.getEnrichedAnnotationsByImageIds(imageIds);

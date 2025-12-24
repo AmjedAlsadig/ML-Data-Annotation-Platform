@@ -386,29 +386,58 @@ export class DbStorage implements IStorage {
     return image;
   }
 
+  // Get all images with their published status from project assignments
+  async getAllImagesWithPublishStatus(): Promise<{
+    id: string;
+    filename: string;
+    url: string;
+    uploadedAt: Date;
+    projectId: string | null;
+    projectName: string | null;
+    published: boolean | null;
+  }[]> {
+    const result = await db
+      .select({
+        id: images.id,
+        filename: images.filename,
+        url: images.url,
+        uploadedAt: images.uploadedAt,
+        projectId: projectImages.projectId,
+        projectName: projects.name,
+        published: projectImages.published,
+      })
+      .from(images)
+      .leftJoin(projectImages, eq(images.id, projectImages.imageId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
+      .orderBy(images.uploadedAt);
+
+    return result;
+  }
+
   async getImagesByFilename(filename: string): Promise<Image[]> {
     return await db
-        .select()
-        .from(images)
-        .where(eq(images.filename, filename));
+      .select()
+      .from(images)
+      .where(eq(images.filename, filename));
   }
 
   // Annotation methods
   async getAnnotationsByImage(imageId: string): Promise<AnnotationDetailsDTO[]> {
- return await db
-    .select({
-      id: annotations.id,
-      projectName: projects.name,
-      labelTypeName: labels.name,
-      labelClassName: labelClasses.name,
-      annotatorName: users.name,
-    })
-    .from(annotations)
-    .leftJoin(projects, eq(projects.id, annotations.projectId))
-    .leftJoin(labels, eq(labels.id, annotations.labelId))
-    .leftJoin(labelClasses, eq(labelClasses.id, annotations.labelClassesId))
-    .leftJoin(users, eq(users.id, annotations.userId))
-    .where(eq(annotations.imageId, imageId));  }
+    return await db
+      .select({
+        id: annotations.id,
+        projectName: projects.name,
+        labelTypeName: labels.name,
+        labelClassName: labelClasses.name,
+        annotatorName: users.name,
+      })
+      .from(annotations)
+      .leftJoin(projects, eq(projects.id, annotations.projectId))
+      .leftJoin(labels, eq(labels.id, annotations.labelId))
+      .leftJoin(labelClasses, eq(labelClasses.id, annotations.labelClassesId))
+      .leftJoin(users, eq(users.id, annotations.userId))
+      .where(eq(annotations.imageId, imageId));
+  }
 
   async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
     return await db.select().from(annotations).where(eq(annotations.userId, userId));
@@ -765,14 +794,20 @@ export class DbStorage implements IStorage {
       .select({
         annotationId: annotations.id,
         imageId: annotations.imageId,
+        projectId: annotations.projectId,
         labelClass: labelClasses.name,
         labelType: labels.name,
         annotatedAt: annotations.annotatedAt,
-        annotatorId: annotations.userId
+        annotatorId: annotations.userId,
+        published: projectImages.published
       })
       .from(annotations)
       .innerJoin(labelClasses, eq(annotations.labelClassesId, labelClasses.id))
       .innerJoin(labels, eq(labelClasses.labelTypeId, labels.id))
+      .innerJoin(projectImages, and(
+        eq(annotations.imageId, projectImages.imageId),
+        eq(annotations.projectId, projectImages.projectId)
+      ))
       .where(inArray(annotations.imageId, imageIds));
 
     return result;
@@ -816,7 +851,8 @@ export class DbStorage implements IStorage {
           images: imagesInProject.map(img => ({
             id: img.id,
             filename: img.filename,
-            url: img.url
+            url: img.url,
+            published: img.published
           }))
         };
       })
