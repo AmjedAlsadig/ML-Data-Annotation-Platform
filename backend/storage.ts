@@ -319,130 +319,359 @@ async getUserByEmail(email: string): Promise<User> {
 
   
   // Project methods == testing in storage-basic.test.ts
+
   async getProject(id: string): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+
+    if(!id || typeof id !== "string"){
+
+      throw new Error("Invalid project id");
+    }
+
+    let project : Project | undefined;
+
+    try{
+    [project] = await db.select().from(projects).where(eq(projects.id, id));
+    } catch {
+
+      throw new Error("Failed to fetch project");
+    }
+
     return project;
   }
 
-  async getProjectsByCreator(userId: string): Promise<Project[]> {
-    const projectWOstats = await db.select().from(projects).where(eq(projects.createdBy, userId));
-    const projectsWithProgress = await Promise.all(
-      projectWOstats.map(async (a) => {
-        const progress = await this.getProjectStats(a.id);
-        return { ...a, ...progress };
-        // return { ...a.project};
-      })
-    );
-
-    return projectsWithProgress;
+async getProjectsByCreator(userId: string): Promise<Project[]> {
+  if (!userId || typeof userId !== "string") {
+    throw new Error("Invalid user id");
   }
 
+  let baseProjects: Project[];
+
+  try {
+    baseProjects = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.createdBy, userId));
+  } catch {
+    throw new Error("Failed to fetch projects");
+  }
+
+  try {
+    return await Promise.all(
+      baseProjects.map(async (p) => {
+        const progress = await this.getProjectStats(p.id);
+        return { ...p, ...progress };
+      })
+    );
+  } catch {
+    throw new Error("Failed to compute project statistics");
+  }
+}
+
+
   async getProjectsByAnnotator(userId: string): Promise<Project[]> {
-    const assignments = await db
+  if (!userId || typeof userId !== "string") {
+    throw new Error("Invalid user id");
+  }
+
+  let assignments: { project: Project }[];
+
+  try {
+    assignments = await db
       .select({ project: projects })
       .from(projectAssignments)
       .innerJoin(projects, eq(projectAssignments.projectId, projects.id))
       .where(eq(projectAssignments.userId, userId));
+  } catch {
+    throw new Error("Failed to fetch assigned projects");
+  }
 
-    const projectsWithProgress = await Promise.all(
+  try {
+    return await Promise.all(
       assignments.map(async (a) => {
         const progress = await this.getProjectStats(a.project.id);
         return { ...a.project, ...progress };
-        // return { ...a.project};
       })
     );
-
-    return projectsWithProgress;
+  } catch {
+    throw new Error("Failed to compute project statistics");
   }
+}
+
+// === Data specialist , to test in data-specialist.test.ts 
+
 
   async createProject(insertProject: InsertProject): Promise<Project> {
-    const [project] = await db.insert(projects).values(insertProject).returning();
-    return project;
+
+  if (!insertProject?.name || !insertProject?.createdBy) {
+    throw new Error("Invalid project payload");
   }
 
-  async deleteProject(id: string): Promise<void> {
-    await db.delete(projects).where(eq(projects.id, id));
+  let project: Project | undefined;
+
+  try {
+    [project] = await db.insert(projects).values(insertProject).returning();
+  } catch {
+    throw new Error("DB insert failed");
   }
+
+  if (!project) {
+    throw new Error("Failed to create project");
+  }
+
+  return project;
+}
+
+async deleteProject(id: string): Promise<void> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid project id");
+  }
+
+  let result: unknown;
+
+  try {
+    result = await db.delete(projects)
+      .where(eq(projects.id, id))
+      .execute();
+  } catch {
+    throw new Error("Failed to delete project");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("Project not found");
+  }
+}
+
 
   async updateProjectStatus(id: string, status: "not_started" | "in_progress" | "completed"): Promise<void> {
-    await db.update(projects).set({ status }).where(eq(projects.id, id));
+      if (!id || typeof id !== "string") {
+    throw new Error("Invalid project id");
   }
 
-  async assignImagesToProject(projectId: string, imageIds: string[]): Promise<ProjectImage[]> {
-    if (imageIds.length === 0) return [];
+  let result: unknown;
 
-    // Check if images exist
-    const existingImages = await db
+  try {
+    result = await db.update(projects)
+      .set({ status })
+      .where(eq(projects.id, id))
+      .execute();
+  } catch {
+    throw new Error("Failed to update project status");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("Project not found");
+  }
+  }
+
+ async assignImagesToProject(projectId: string, imageIds: string[]): Promise<ProjectImage[]> {
+  if (!projectId || typeof projectId !== "string") {
+    throw new Error("Invalid project id");
+  }
+
+  if (!Array.isArray(imageIds)) {
+    throw new Error("Invalid image id list");
+  }
+
+  if (imageIds.length === 0) {
+    return [];
+  }
+
+  if (imageIds.some(id => !id || typeof id !== "string")) {
+    throw new Error("Invalid image id");
+  }
+
+  let existingImages: { id: string }[];
+
+  try {
+    existingImages = await db
       .select({ id: images.id })
       .from(images)
       .where(inArray(images.id, imageIds));
+  } catch {
+    throw new Error("Failed to verify images");
+  }
 
-    if (existingImages.length !== imageIds.length) {
-      throw new Error("Some images not found");
-    }
+  if (existingImages.length !== imageIds.length) {
+    throw new Error("Some images not found");
+  }
 
-    // Create project image assignments
-    const assignments = imageIds.map(imageId => ({
-      projectId,
-      imageId
-    }));
+  const assignments = imageIds.map(imageId => ({
+    projectId,
+    imageId,
+  }));
 
-    const result = await db
+  let result: ProjectImage[];
+
+  try {
+    result = await db
       .insert(projectImages)
       .values(assignments)
       .onConflictDoNothing()
       .returning();
-
-    return result;
+  } catch {
+    throw new Error("Failed to assign images to project");
   }
 
+  return result;
+}
 
 
-  async createLabel(insertLabel: InsertLabel): Promise<Label> {
-    const [label] = await db.insert(labels).values(insertLabel).returning();
-    return label;
+async createLabel(insertLabel: InsertLabel): Promise<Label> {
+  if (!insertLabel?.name) {
+    throw new Error("Invalid label payload");
   }
 
-  async deleteLabel(id: string): Promise<void> {
-    await db.delete(labels).where(eq(labels.id, id));
+  let label: Label | undefined;
+
+  try {
+    [label] = await db.insert(labels).values(insertLabel).returning();
+  } catch {
+    throw new Error("DB insert failed");
   }
 
-
-
-  async getAllLabelTypes(): Promise<(Label & { classCount: number })[]> {
-    const result = await db.select({ id: labels.id, name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id), }).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).groupBy(labels.id).orderBy(labels.createdAt);
-
-    return result;
+  if (!label) {
+    throw new Error("Failed to create label");
   }
-  async getLabelType(id: string): Promise<(Label & { classCount: number }) | undefined> {
-    const result = await db.select({ id: labels.id, name: labels.name, description: labels.description, createdAt: labels.createdAt, classCount: count(labelClasses.id), }).from(labels).leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId)).where(eq(labels.id, id)).groupBy(labels.id);
 
-    return result[0] || undefined;
+  return label;
+}
+
+
+ async deleteLabel(id: string): Promise<void> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid label id");
   }
+
+  let result: unknown;
+
+  try {
+    result = await db.delete(labels)
+      .where(eq(labels.id, id))
+      .execute();
+  } catch {
+    throw new Error("Failed to delete label");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("Label not found");
+  }
+}
+
+
+async getAllLabelTypes(): Promise<(Label & { classCount: number })[]> {
+  try {
+    return await db
+      .select({
+        id: labels.id,
+        name: labels.name,
+        description: labels.description,
+        createdAt: labels.createdAt,
+        classCount: count(labelClasses.id),
+      })
+      .from(labels)
+      .leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId))
+      .groupBy(labels.id)
+      .orderBy(labels.createdAt);
+  } catch {
+    throw new Error("Failed to fetch label types");
+  }
+}
+
+
+ async getLabelType(id: string): Promise<Label & { classCount: number }> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid label id");
+  }
+
+  let result: (Label & { classCount: number })[];
+
+  try {
+    result = await db
+      .select({
+        id: labels.id,
+        name: labels.name,
+        description: labels.description,
+        createdAt: labels.createdAt,
+        classCount: count(labelClasses.id),
+      })
+      .from(labels)
+      .leftJoin(labelClasses, eq(labels.id, labelClasses.labelTypeId))
+      .where(eq(labels.id, id))
+      .groupBy(labels.id);
+  } catch {
+    throw new Error("Failed to fetch label type");
+  }
+
+  if (result.length === 0) {
+    throw new Error("Label type not found");
+  }
+
+  return result[0];
+}
+
 
   async updateLabelType(id: string, labelTypeData: Partial<InsertLabel>): Promise<Label> {
-    const [labelType] = await db.update(labels).set(labelTypeData).where(eq(labels.id, id)).returning();
-
-    if (!labelType) {
-      throw new Error(`Label type with id ${id} not found`);
-    }
-
-    return labelType;
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid label id");
   }
 
-  async deleteLabelTypes(ids: string[]): Promise<Label[]> {
-    if (ids.length === 0) return [];
+  if (!labelTypeData || Object.keys(labelTypeData).length === 0) {
+    throw new Error("Invalid label payload");
+  }
+
+  let labelType: Label | undefined;
+
+  try {
+    [labelType] = await db
+      .update(labels)
+      .set(labelTypeData)
+      .where(eq(labels.id, id))
+      .returning();
+  } catch {
+    throw new Error("Failed to update label type");
+  }
+
+  if (!labelType) {
+    throw new Error("Label type not found");
+  }
+
+  return labelType;
+}
 
 
-    const validIds = ids.filter(id => id && id.trim() !== '');
+async deleteLabelTypes(ids: string[]): Promise<Label[]> {
+  if (!Array.isArray(ids)) {
+    throw new Error("Invalid label id list");
+  }
 
-    if (validIds.length === 0) return [];
+  if (ids.length === 0) {
+    return [];
+  }
 
-    const result = await db.delete(labels)
+  const validIds = ids.filter(id => typeof id === "string" && id.trim() !== "");
+
+  if (validIds.length !== ids.length) {
+    throw new Error("Invalid label id");
+  }
+
+  let result: Label[];
+
+  try {
+    result = await db
+      .delete(labels)
       .where(inArray(sql`${labels.id}::text`, validIds))
       .returning();
-    return result;
+  } catch {
+    throw new Error("Failed to delete label types");
   }
+
+  if (result.length === 0) {
+    throw new Error("No label types found");
+  }
+
+  return result;
+}
+
 
   // Label Class Methods
   async getLabelClassesByType(labelTypeId: string): Promise<LabelClass[]> {
