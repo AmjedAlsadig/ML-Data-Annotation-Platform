@@ -1068,16 +1068,28 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
 
 
   // Get Annotation by ID with details
-  async getAnnotation(id: string): Promise<(Annotation & {
+ async getAnnotation(id: string): Promise<Annotation & {
+  imageFilename: string;
+  imageUrl: string;
+  labelClassName: string;
+  labelTypeName: string;
+  annotatorUsername: string;
+}> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid annotation id");
+  }
+
+  let result: (Annotation & {
     imageFilename: string;
     imageUrl: string;
     labelClassName: string;
     labelTypeName: string;
     annotatorUsername: string;
-  }) | undefined> {
-    const result = await db
+  })[];
+
+  try {
+    result = await db
       .select({
-        // Annotation fields
         id: annotations.id,
         projectId: annotations.projectId,
         imageId: annotations.imageId,
@@ -1085,8 +1097,6 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
         labelClassesId: annotations.labelClassesId,
         annotatedAt: annotations.annotatedAt,
         labelId: annotations.labelId,
-
-        // Joined fields
         imageFilename: images.filename,
         imageUrl: images.url,
         labelClassName: labelClasses.name,
@@ -1099,12 +1109,28 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
       .innerJoin(labels, eq(labelClasses.labelTypeId, labels.id))
       .innerJoin(users, eq(annotations.userId, users.id))
       .where(eq(annotations.id, id));
-
-    return result[0] || undefined;
+  } catch {
+    throw new Error("Failed to fetch annotation");
   }
 
-  async getAnnotationsByProjectAndAnnotator(projectId: string, annotatorId: string): Promise<any[]> {
-    const result = await db
+  if (result.length === 0) {
+    throw new Error("Annotation not found");
+  }
+
+  return result[0];
+}
+
+
+ async getAnnotationsByProjectAndAnnotator(projectId: string, annotatorId: string): Promise<any[]> {
+  if (!projectId || typeof projectId !== "string") {
+    throw new Error("Invalid project id");
+  }
+  if (!annotatorId || typeof annotatorId !== "string") {
+    throw new Error("Invalid annotator id");
+  }
+
+  try {
+    return await db
       .select({
         id: annotations.id,
         projectId: annotations.projectId,
@@ -1121,19 +1147,23 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
       .innerJoin(images, eq(annotations.imageId, images.id))
       .innerJoin(labelClasses, eq(annotations.labelClassesId, labelClasses.id))
       .innerJoin(labels, eq(labelClasses.labelTypeId, labels.id))
-      .where(
-        and(
-          eq(annotations.projectId, projectId),
-          eq(annotations.userId, annotatorId)
-        )
-      )
+      .where(and(
+        eq(annotations.projectId, projectId),
+        eq(annotations.userId, annotatorId)
+      ))
       .orderBy(desc(annotations.annotatedAt));
-
-    return result;
+  } catch {
+    throw new Error("Failed to fetch annotations by project and annotator");
   }
+}
 
   async getAnnotationsByProject(projectId: string): Promise<any[]> {
-    const result = await db
+  if (!projectId || typeof projectId !== "string") {
+    throw new Error("Invalid project id");
+  }
+
+  try {
+    return await db
       .select({
         id: annotations.id,
         projectId: annotations.projectId,
@@ -1156,18 +1186,28 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
       .innerJoin(users, eq(annotations.userId, users.id))
       .where(eq(annotations.projectId, projectId))
       .orderBy(desc(annotations.annotatedAt));
-
-    return result;
+  } catch {
+    throw new Error("Failed to fetch annotations by project");
   }
+}
+
 
   // Get annotation statistics for a project
-  async getProjectStats(projectId: string): Promise<{
-    numberOfImages: number;
-    annotatedImages: number;
-    totalAnnotations: number;
-    activeAnnotators: number;
-  }> {
-    const result = await db
+ async getProjectStats(projectId: string): Promise<{
+  numberOfImages: number;
+  annotatedImages: number;
+  totalAnnotations: number;
+  activeAnnotators: number;
+}> {
+  if (!projectId || typeof projectId !== "string") {
+    throw new Error("Invalid project id");
+  }
+
+  let annotationStats: any[];
+  let projectStats: any[];
+
+  try {
+    annotationStats = await db
       .select({
         totalAnnotations: count(annotations.id),
         annotatedImages: count(sql`DISTINCT ${annotations.imageId}`),
@@ -1176,51 +1216,108 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
       .from(annotations)
       .where(eq(annotations.projectId, projectId));
 
-    const projectResult = await db.select({
-      numberOfImages: count(projectImages.id),
-    })
+    projectStats = await db
+      .select({
+        numberOfImages: count(projectImages.id),
+      })
       .from(projectImages)
       .where(eq(projectImages.projectId, projectId));
-
-    return {
-      numberOfImages: Number(projectResult[0].numberOfImages || 0),
-      annotatedImages: Number(result[0]?.annotatedImages || 0),
-      totalAnnotations: Number(result[0]?.totalAnnotations || 0),
-      activeAnnotators: Number(result[0]?.activeAnnotators || 0),
-    };
+  } catch {
+    throw new Error("Failed to fetch project statistics");
   }
 
+  return {
+    numberOfImages: Number(projectStats[0]?.numberOfImages ?? 0),
+    annotatedImages: Number(annotationStats[0]?.annotatedImages ?? 0),
+    totalAnnotations: Number(annotationStats[0]?.totalAnnotations ?? 0),
+    activeAnnotators: Number(annotationStats[0]?.activeAnnotators ?? 0),
+  };
+}
 
 
   // Project assignment methods
-  async assignUserToProject(insertAssignment: InsertProjectAssignment): Promise<ProjectAssignment> {
-    // Check if assignment already exists
-    const [existing] = await db
+ async assignUserToProject(insertAssignment: InsertProjectAssignment): Promise<ProjectAssignment> {
+  if (
+    !insertAssignment?.projectId ||
+    !insertAssignment?.userId
+  ) {
+    throw new Error("Invalid project assignment payload");
+  }
+
+  let existing: ProjectAssignment | undefined;
+
+  try {
+    [existing] = await db
       .select()
       .from(projectAssignments)
-      .where(
-        and(
-          eq(projectAssignments.projectId, insertAssignment.projectId),
-          eq(projectAssignments.userId, insertAssignment.userId)
-        )
-      );
-
-    if (existing) {
-      // Return existing assignment instead of creating duplicate
-      return existing;
-    }
-
-    const [assignment] = await db.insert(projectAssignments).values(insertAssignment).returning();
-    return assignment;
+      .where(and(
+        eq(projectAssignments.projectId, insertAssignment.projectId),
+        eq(projectAssignments.userId, insertAssignment.userId)
+      ));
+  } catch {
+    throw new Error("Failed to check existing project assignment");
   }
 
-  async getProjectAssignments(projectId: string): Promise<ProjectAssignment[]> {
-    return await db.select().from(projectAssignments).where(eq(projectAssignments.projectId, projectId));
+  if (existing) {
+    return existing;
   }
 
-  async deleteImage(id: string): Promise<void> {
-    await db.delete(images).where(eq(images.id, id));
+  let assignment: ProjectAssignment | undefined;
+
+  try {
+    [assignment] = await db
+      .insert(projectAssignments)
+      .values(insertAssignment)
+      .returning();
+  } catch {
+    throw new Error("Failed to create project assignment");
   }
+
+  if (!assignment) {
+    throw new Error("Project assignment creation failed");
+  }
+
+  return assignment;
+}
+
+
+async getProjectAssignments(projectId: string): Promise<ProjectAssignment[]> {
+  if (!projectId || typeof projectId !== "string") {
+    throw new Error("Invalid project id");
+  }
+
+  try {
+    return await db
+      .select()
+      .from(projectAssignments)
+      .where(eq(projectAssignments.projectId, projectId));
+  } catch {
+    throw new Error("Failed to fetch project assignments");
+  }
+}
+
+
+async deleteImage(id: string): Promise<void> {
+  if (!id || typeof id !== "string") {
+    throw new Error("Invalid image id");
+  }
+
+  let result: unknown;
+
+  try {
+    result = await db
+      .delete(images)
+      .where(eq(images.id, id))
+      .execute();
+  } catch {
+    throw new Error("Failed to delete image");
+  }
+
+  if ((result as any)?.rowCount === 0) {
+    throw new Error("Image not found");
+  }
+}
+
 
   async getPortfolioImages(userId: string, filters?: {
     projectId?: string;
@@ -1327,34 +1424,47 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
   */
 
   // Get "Enriched" labels for ONE OR MANY images
-  async getEnrichedAnnotationsByImageIds(imageIds: string[]): Promise<any[]> {
-    if (!imageIds || imageIds.length === 0) {
-      return [];
-    }
+async getEnrichedAnnotationsByImageIds(imageIds: string[]): Promise<any[]> {
+  if (!Array.isArray(imageIds)) {
+    throw new Error("Invalid image id list");
+  }
 
-    const result = await db
+  if (imageIds.length === 0) {
+    return [];
+  }
+
+  if (imageIds.some(id => typeof id !== "string" || id.trim() === "")) {
+    throw new Error("Invalid image id");
+  }
+
+  try {
+    return await db
       .select({
         annotationId: annotations.id,
         imageId: annotations.imageId,
         labelClass: labelClasses.name,
         labelType: labels.name,
         annotatedAt: annotations.annotatedAt,
-        annotatorId: annotations.userId
+        annotatorId: annotations.userId,
       })
       .from(annotations)
       .innerJoin(labelClasses, eq(annotations.labelClassesId, labelClasses.id))
       .innerJoin(labels, eq(labelClasses.labelTypeId, labels.id))
       .where(inArray(annotations.imageId, imageIds));
-
-    return result;
+  } catch {
+    throw new Error("Failed to fetch enriched annotations");
   }
+}
+
 
 
   // Get All Projects with their Images and Label Type
-  async getAllProjectsWithManifest(): Promise<any[]> {
+ async getAllProjectsWithManifest(): Promise<any[]> {
+  let projectsList: any[];
 
+  try {
     // Get the base project info + Label Type info
-    const projectsList = await db
+    projectsList = await db
       .select({
         id: projects.id,
         name: projects.name,
@@ -1364,21 +1474,24 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
         labelType: {
           id: labels.id,
           name: labels.name,
-          description: labels.description
+          description: labels.description,
         },
         createdBy: {
           id: users.id,
-          email: users.email
-        }
+          email: users.email,
+        },
       })
       .from(projects)
       .leftJoin(labels, eq(projects.labelTypeId, labels.id))
       .leftJoin(users, eq(projects.createdBy, users.id));
+      // For each project, fetch the list of assigned images -- IN PARALLEL for effeciency
+  } catch {
+    throw new Error("Failed to fetch projects");
+  }
 
-    // For each project, fetch the list of assigned images -- IN PARALLEL for effeciency 
-    const fullManifest = await Promise.all(
+  try {
+    return await Promise.all(
       projectsList.map(async (project) => {
-        // Get all images assigned to this specific project
         const imagesInProject = await this.getImagesByProject(project.id);
 
         return {
@@ -1387,14 +1500,16 @@ async getAnnotationsByUser(userId: string): Promise<Annotation[]> {
           images: imagesInProject.map(img => ({
             id: img.id,
             filename: img.filename,
-            url: img.url
-          }))
+            url: img.url,
+          })),
         };
       })
     );
-
-    return fullManifest;
+  } catch {
+    throw new Error("Failed to fetch project manifest");
   }
+}
+
 
 }
 
