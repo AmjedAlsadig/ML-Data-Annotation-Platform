@@ -1,6 +1,8 @@
 /// <reference types="vitest/globals" />
 
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
+
+// -------------------- Schema mocks --------------------
 
 vi.mock("@shared/schema", () => ({
   users: {},
@@ -13,25 +15,9 @@ vi.mock("@shared/schema", () => ({
   projectImages: {}
 }));
 
+// -------------------- DB + QueryBuilder mocks --------------------
 
-// -------------------- Mock DB functionalities --------------------
-
-// Build fake DB backend with required mock functionalities
-const qb: any = {
-  select: vi.fn().mockReturnThis(),
-  insert: vi.fn().mockReturnThis(),
-  update: vi.fn().mockReturnThis(),
-  delete: vi.fn().mockReturnThis(),
-  from: vi.fn().mockReturnThis(),
-  where: vi.fn().mockReturnThis(),
-  innerJoin: vi.fn().mockReturnThis(),
-  values: vi.fn().mockReturnThis(),
-  set: vi.fn().mockReturnThis(),
-  returning: vi.fn(),
-  orderBy: vi.fn(),
-  execute: vi.fn()
-};
-
+let qb: any;
 
 vi.mock("../backend/db", () => ({
   db: {
@@ -44,17 +30,40 @@ vi.mock("../backend/db", () => ({
 
 import { DbStorage } from "../backend/storage";
 
-// -------------------- Mock Data --------------------
+// -------------------- Test Data --------------------
 
 const mockUsers = [
   { id: "u1", name: "alpha", firstname: "alpha", lastname: "alpha", email: "alpha@test.com", password: "hashedpwd", role: "annotator", createAt: new Date(), resetPasswordToken: null, resetPassworToken: null, resetPasswordExpires: null },
   { id: "u2", name: "beta", firstname: "beta", lastname: "beta", email: "beta@test.com", password: "hashedpwd1", role: "data_specialist",  createAt: new Date(), resetPasswordToken: null, resetPassworToken: null, resetPasswordExpires: null },
 ] as const;
 
-const mockProjects = [
-  { id: "p1", name: "Project 1", createdBy: "u1" },
-  { id: "p2", name: "Project 2", createdBy: "u2" },
-] as const;
+// -------------------- Fresh QB per test --------------------
+
+beforeEach(() => {
+  qb = {
+    select: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    from: vi.fn(),
+    where: vi.fn(),
+    values: vi.fn(),
+    set: vi.fn(),
+    returning: vi.fn(),
+    orderBy: vi.fn(),
+    execute: vi.fn(),
+  };
+
+  qb.select.mockReturnValue(qb);
+  qb.insert.mockReturnValue(qb);
+  qb.update.mockReturnValue(qb);
+  qb.delete.mockReturnValue(qb);
+  qb.from.mockReturnValue(qb);
+  qb.where.mockReturnValue(qb);
+  qb.values.mockReturnValue(qb);
+  qb.set.mockReturnValue(qb);
+  qb.orderBy.mockReturnValue(qb);
+});
 
 
 /// ---- User (verification, retrieval) tests -----
@@ -76,6 +85,19 @@ beforeEach(() => {
   qb.returning = vi.fn();
 });
 
+
+ // updateUserRole 
+  test("updateUserRole updates a user's role", async () => {
+    qb.update.mockReturnThis();
+    qb.set = vi.fn().mockReturnThis();
+    qb.where.mockReturnThis();
+    qb.execute = vi.fn().mockResolvedValue([]);
+
+    const storage = new DbStorage();
+    await storage.updateUserRole("u1", "admin");
+
+    expect(qb.set).toHaveBeenCalledWith({ role: "admin" });
+  });
 
 // admin ======== getAllUsers ========
   test("getAllUsers returns all users", async () => {
