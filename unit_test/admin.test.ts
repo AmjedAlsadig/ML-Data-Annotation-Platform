@@ -69,48 +69,62 @@ beforeEach(() => {
 /// ---- User (verification, retrieval) tests -----
 describe("User Storage Methods", () => {
 
-  // Reset mocks before each test
-beforeEach(() => {
-  qb.select = vi.fn(() => qb);
-  qb.insert = vi.fn(() => qb);
-  qb.update = vi.fn(() => qb);
-  qb.delete = vi.fn(() => qb);
-  qb.from   = vi.fn(() => qb);
-  qb.where  = vi.fn(() => qb);
-  qb.innerJoin = vi.fn(() => qb);
-  qb.values = vi.fn(() => qb);
-  qb.set    = vi.fn(() => qb);
-  qb.orderBy = vi.fn(() => qb);
-  qb.execute = vi.fn();
-  qb.returning = vi.fn();
+ // updateUserRole 
+test("updateUserRole updates a user's role", async () => {
+  qb.execute.mockResolvedValue({ rowCount: 1 });
+
+  const storage = new DbStorage();
+  await storage.updateUserRole("u1", "admin");
+
+  expect(qb.set).toHaveBeenCalledWith({ role: "admin" });
+});
+
+test("updateUserRole throws when user type invalid", async () => {
+  qb.execute.mockResolvedValue();
+  const storage = new DbStorage();
+    await expect (storage.updateUserRole("" as any, "admin")).rejects.toThrow("Invalid user id");
+
+});
+
+test("updateUserRole throws when db fails", async () => {
+  qb.execute.mockRejectedValue(new Error("db error"));
+  const storage = new DbStorage();
+    await expect (storage.updateUserRole("u1", "admin")).rejects.toThrow("Failed to update user role");
+
+});
+
+test("updateUserRole throws when user does not exist", async () => {
+  qb.execute.mockResolvedValue({ rowCount: 0 });
+
+  const storage = new DbStorage();
+
+  await expect(storage.updateUserRole("missing-id", "admin"))
+    .rejects
+    .toThrow("User not found");
 });
 
 
- // updateUserRole 
-  test("updateUserRole updates a user's role", async () => {
-    qb.update.mockReturnThis();
-    qb.set = vi.fn().mockReturnThis();
-    qb.where.mockReturnThis();
-    qb.execute = vi.fn().mockResolvedValue([]);
-
-    const storage = new DbStorage();
-    await storage.updateUserRole("u1", "admin");
-
-    expect(qb.set).toHaveBeenCalledWith({ role: "admin" });
-  });
 
 // admin ======== getAllUsers ========
-  test("getAllUsers returns all users", async () => {
-    qb.select.mockReturnThis();
-    qb.from.mockImplementation(() =>
-        Promise.resolve(mockUsers)
-    );
+ test("getAllUsers returns all users", async () => {
+  qb.from.mockResolvedValue(mockUsers);
 
-    const storage = new DbStorage();
-    const result = await storage.getAllUsers();
+  const storage = new DbStorage();
+  const result = await storage.getAllUsers();
 
-    expect(result.length).toBe(2);
-  });
+  expect(result).toEqual(mockUsers);
+});
+
+
+test("getAllUsers throws when DB fails", async () => {
+  qb.from.mockRejectedValue(new Error("db down"));
+
+  const storage = new DbStorage();
+
+  await expect(storage.getAllUsers())
+    .rejects
+    .toThrow("Failed to fetch users");
+});
 
 
 
