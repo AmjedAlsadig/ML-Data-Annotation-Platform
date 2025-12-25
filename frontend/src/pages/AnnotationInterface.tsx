@@ -638,17 +638,25 @@ export default function AnnotationInterface() {
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                          {labelClasses.map((labelClass) => (
-                            <Button
-                              key={labelClass.id}
-                              variant={selectedLabelClassId === labelClass.id ? 'default' : 'outline'}
-                              onClick={() => handleLabelSelect(labelClass.id)}
-                              disabled={currentImage?.published}
-                              data-testid={`button-label-class-${labelClass.id}`}
-                            >
-                              {labelClass.name}
-                            </Button>
-                          ))}
+                          {labelClasses.map((labelClass) => {
+                            const isSelected = selectedLabelClassId === labelClass.id;
+                            return (
+                              <Button
+                                key={labelClass.id}
+                                variant={isSelected ? 'default' : 'outline'}
+                                onClick={() => handleLabelSelect(labelClass.id)}
+                                disabled={currentImage?.published}
+                                className={isSelected && currentImage?.published
+                                  ? 'bg-green-600 hover:bg-green-600 text-white border-green-600 opacity-100'
+                                  : ''
+                                }
+                                data-testid={`button-label-class-${labelClass.id}`}
+                              >
+                                {labelClass.name}
+                                {isSelected && currentImage?.published && ' ✓'}
+                              </Button>
+                            );
+                          })}
                         </div>
                       )}
                     </Card>

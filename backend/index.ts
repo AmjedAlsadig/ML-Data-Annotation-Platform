@@ -1,51 +1,59 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./swagger";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import swaggerUi from 'swagger-ui-express';
-import swaggerSpec from './swagger';
 import { registerAdminRoutes } from "./adminRoutes";
 
-const app = express();
+export const app = express();
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// -------------------- Swagger --------------------
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-declare module 'express-session' {
+declare module "express-session" {
   interface SessionData {
     userId: string;
   }
 }
 
-declare module 'http' {
+declare module "http" {
   interface IncomingMessage {
-    rawBody: unknown
+    rawBody: unknown;
   }
 }
 
-// Session middleware
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'vt-annotator-secret-key-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  }
-}));
+// -------------------- Session --------------------
+app.use(
+  session({
+    secret:
+      process.env.SESSION_SECRET ||
+      "vt-annotator-secret-key-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24h
+    },
+  })
+);
 
-app.use(express.json({
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
-  }
-}));
+// -------------------- Body parsers --------------------
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as any).rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: false }));
 
+// -------------------- Logger middleware --------------------
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, any> | undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -53,18 +61,23 @@ app.use((req, res, next) => {
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
-  res.on("finish", () => {
+  res.on("finish", async () => {
+    if (!path.startsWith("/api")) return;
+
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
+    let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
+    if (capturedJsonResponse) {
+      logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+    }
 
+    if (logLine.length > 80) {
+      logLine = logLine.slice(0, 79) + "…";
+    }
+
+    // ne loguj tokom testova
+    if (process.env.NODE_ENV !== "test") {
+      const { log } = await import("./vite");
       log(logLine);
     }
   });
@@ -72,33 +85,40 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+// ==================== BOOTSTRAP / READY ====================
+export const ready = (async () => {
   const server = await registerRoutes(app);
   registerAdminRoutes(app);
 
+  // -------------------- Global error handler --------------------
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    if (process.env.NODE_ENV !== "test") {
+      console.error("Global error handler:", err);
+    }
+
+    res.status(status).json({
+      success: false,
+      error: message,
+      code: err.code || "INTERNAL_ERROR",
+    });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+  // -------------------- Vite / Static --------------------
+  if (process.env.NODE_ENV !== "test") {
+    const { setupVite, serveStatic, log } = await import("./vite");
+
+    if (process.env.NODE_ENV === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
+    }
+
+    const port = parseInt(process.env.PORT || "5006", 10);
+    server.listen(port, () => {
+      log(`serving on port ${port}`);
+    });
   }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5006', 10);
-  server.listen(port, () => {
-    log(`serving on port ${port}`);
-  });
 })();

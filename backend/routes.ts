@@ -111,6 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const data = insertUserSchema.parse(req.body);
             const role = data.role ? data.role : 'annotator';
             // Check if user already exists
+ 
 
             try {
                 
@@ -120,6 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 if(findError.message !== "User not found"){
                     throw findError;
                 }
+
             }
 
             // Hash password
@@ -138,6 +140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error: any) {
             console.error("Registration error:", error);
 
+
             if(error.issues){
                 return res.status(400).json({error: "Validation failed", details: error.issues})
             }
@@ -149,6 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 default:
                     return res.status(500).json({error: "Internal Server Error"});
             }
+
         }
     });
 
@@ -186,10 +190,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { email, password } = req.body;
 
             if (!email || !password) {
-                return res.status(400).json({ error: "Email and password are required" });
+                return res.status(400).json({ success: false, error: "Email and password are required" });
             }
 
             // Find user
+
             let user;
             try {
                 user = await storage.getUserByEmail(email);
@@ -198,12 +203,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     return res.status(401).json({error: "Invalid credentials"});
                 }
                 throw findError;
+
             }
 
             // Verify password
             const isValidPassword = await bcrypt.compare(password, user.password);
             if (!isValidPassword) {
-                return res.status(401).json({ error: "Invalid credentials" });
+                return res.status(401).json({ success: false, error: "Invalid credentials" });
             }
 
             // Store user in session
@@ -227,10 +233,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json({ user: userWithoutPassword, token });
         } catch (error: any) {
             console.error("Login error:", error);
+
             if (error.meesage === "Failed to fetch user by email"){
                 return res.status(500).json({ error: "Database unavailable"});
             }
             res.status(500).json({ error: "Internal Server Error" });
+
         }
     });
 
@@ -249,8 +257,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.post("/api/auth/logout", (req, res) => {
         req.session?.destroy((err) => {
             if (err) {
+
                 console.error("Logout error:", err);
                 return res.status(500).json({ error: "Failed to Log out" });
+
             }
             res.clearCookie("connect.sid");
             res.json({ message: "Logged out successfully" });
@@ -277,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const user = await storage.getUser(userId);
@@ -286,6 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(userWithoutPassword);
         } catch (error: any) {
             console.error("Get user error:", error);
+
             
             if(error.message === "User not found"){
                 req.session?.destroy(()=>{});
@@ -296,6 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 return res.status(400).json({ error: "Invalid session data"});
             }
             res.status(500).json({ error: "Internal Server Error" });
+
         }
     });
 
@@ -677,12 +689,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const user = await storage.getUser(userId);
             if (!user || user.role !== 'data_specialist') {
+
                 return res.status(403).json({ error: "Access denied: Data Specialists only" });
+
             }
 
             // Get all users
@@ -697,6 +711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error: any) {
             console.error("Get users error:", error);
 
+
             switch (error.message){
                 case "User not found":
                     return res.status(401).json({ error: "User account no longer exists" });
@@ -705,6 +720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 default:
                     return res.status(500).json({ error: "Inrernal Server Error "}); 
             }
+
         }
     });
 
@@ -737,7 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const data = insertProjectSchema.parse({
@@ -749,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(project);
         } catch (error: any) {
             console.error("Create project error:", error);
-            res.status(400).json({ error: error.message || "Failed to create project" });
+            res.status(400).json({ success: false, error: error.message || "Failed to create project" });
         }
     });
 
@@ -757,14 +773,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             await storage.deleteProject(req.params.id);
             res.json({ message: "project deleted successfully" });
         } catch (error: any) {
             console.error("Delete project error:", error);
-            res.status(500).json({ error: "Failed to delete project" });
+            res.status(500).json({ success: false, error: "Failed to delete project" });
         }
     });
 
@@ -790,12 +806,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const user = await storage.getUser(userId);
             if (!user) {
-                return res.status(404).json({ error: "User not found" });
+                return res.status(404).json({ success: false, error: "User not found" });
             }
 
             let projects;
@@ -808,7 +824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(projects);
         } catch (error: any) {
             console.error("Get projects error:", error);
-            res.status(500).json({ error: "Failed to get projects" });
+            res.status(500).json({ success: false, error: "Failed to get projects" });
         }
     });
 
@@ -839,12 +855,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const project = await storage.getProject(req.params.id);
             if (!project) {
-                return res.status(404).json({ error: "Project not found" });
+                return res.status(404).json({ success: false, error: "Project not found" });
             }
             res.json(project);
         } catch (error: any) {
             console.error("Get project error:", error);
-            res.status(500).json({ error: "Failed to get project" });
+            res.status(500).json({ success: false, error: "Failed to get project" });
         }
     });
 
@@ -1142,7 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(assignment);
         } catch (error: any) {
             console.error("Assign user error:", error);
-            res.status(400).json({ error: error.message || "Failed to assign user" });
+            res.status(400).json({ success: false, error: error.message || "Failed to assign user" });
         }
     });
 
@@ -1169,7 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const assignments = await storage.getProjectAssignments(req.params.projectId);
@@ -1188,7 +1204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(assignmentsWithUsers);
         } catch (error: any) {
             console.error("Get assignments error:", error);
-            res.status(500).json({ error: "Failed to get assignments" });
+            res.status(500).json({ success: false, error: "Failed to get assignments" });
         }
     });
 
@@ -1239,12 +1255,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 const userId = req.session?.userId;
                 if (!userId) {
-                    return res.status(401).json({ error: "Not authenticated" });
+                    return res.status(401).json({ success: false, error: "Not authenticated" });
                 }
 
                 const files = req.files as Express.Multer.File[];
                 if (!files || files.length === 0) {
-                    return res.status(400).json({ error: "No files uploaded" });
+                    return res.status(400).json({ success: false, error: "No files uploaded" });
                 }
 
                 console.log(`Processing ${files.length} file(s)`);
@@ -1367,7 +1383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
             } catch (error: any) {
                 console.error("Upload error:", error);
-                res.status(500).json({ error: error.message || "Failed to upload files" });
+                res.status(500).json({ success: false, error: error.message || "Failed to upload files" });
             }
         }
     );
@@ -1404,7 +1420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("Get images error:", error);
-            res.status(500).json({ error: "Failed to get images" });
+            res.status(500).json({ success: false, error: "Failed to get images" });
         }
     });
 
@@ -1469,7 +1485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             const user = await storage.getUser(userId);
@@ -1491,7 +1507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(result);
         } catch (error: any) {
             console.error("Get portfolio images error:", error);
-            res.status(500).json({ error: "Failed to get portfolio images" });
+            res.status(500).json({ success: false, error: "Failed to get portfolio images" });
         }
     });
 
@@ -1525,7 +1541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(images);
         } catch (error: any) {
             console.error("Get images error:", error);
-            res.status(500).json({ error: "Failed to get images" });
+            res.status(500).json({ success: false, error: "Failed to get images" });
         }
     });
 
@@ -1557,13 +1573,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const userId = req.session?.userId;
             if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
+                return res.status(401).json({ success: false, error: "Not authenticated" });
             }
 
             // Get image to extract filename
             const image = await storage.getImage(req.params.id);
             if (!image) {
-                return res.status(404).json({ error: "Image not found" });
+                return res.status(404).json({ success: false, error: "Image not found" });
             }
 
             // Extract filename from URL (MinIO URLs end with the object name)
@@ -1586,7 +1602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json({ message: "Image deleted successfully" });
         } catch (error: any) {
             console.error("Delete image error:", error);
-            res.status(500).json({ error: "Failed to delete image" });
+            res.status(500).json({ success: false, error: "Failed to delete image" });
         }
     });
 
@@ -1597,7 +1613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             res.json({ success: true, data: image });
         } catch (err) {
-            res.status(500).json({ error: "Failed to fetch image" });
+            res.status(500).json({ success: false, error: "Failed to fetch image" });
         }
     });
 
@@ -1634,7 +1650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json({ message: "Label deleted successfully" });
         } catch (error: any) {
             console.error("Delete label error:", error);
-            res.status(500).json({ error: "Failed to delete label" });
+            res.status(500).json({ success: false, error: "Failed to delete label" });
         }
     });
 
@@ -1903,7 +1919,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("Delete label error:", error);
-            res.status(500).json({ error: "Failed to delete label" });
+            res.status(500).json({ success: false, error: "Failed to delete label" });
         }
     });
 
@@ -2164,7 +2180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(annotations);
         } catch (error: any) {
             console.error("Get annotations error:", error);
-            res.status(500).json({ error: "Failed to get annotations" });
+            res.status(500).json({ success: false, error: "Failed to get annotations" });
         }
     });
 
@@ -2423,7 +2439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.get("/api/ML-Engineer/images", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
         try {
-            const allImages = await storage.getAllImages();
+            const allImages = await storage.getAllImagesWithPublishStatus();
             res.json({
                 success: true,
                 count: allImages?.length || 0,
@@ -2431,7 +2447,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("ML: Get all images error:", error);
-            res.status(500).json({ error: "Failed to get image manifest" });
+            res.status(500).json({ success: false, error: "Failed to get image manifest" });
+        }
+    });
+
+    /**
+     * @swagger
+     * /api/ML-Engineer/images/published:
+     *   get:
+     *     summary: Get only published images (ready for ML training)
+     *     tags: [ML Engineer]
+     *     security:
+     *       - bearerAuth: []
+     *     responses:
+     *       200:
+     *         description: List of published images only
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                 count:
+     *                   type: integer
+     *                 data:
+     *                   type: array
+     *       401:
+     *         $ref: '#/components/responses/UnauthorizedError'
+     *       403:
+     *         description: Access denied
+     *       500:
+     *         description: Server error
+     */
+    app.get("/api/ML-Engineer/images/published", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+        try {
+            const allImages = await storage.getAllImagesWithPublishStatus();
+            // Filter to only published images
+            const publishedImages = allImages.filter(img => img.published === true);
+            res.json({
+                success: true,
+                count: publishedImages.length,
+                data: publishedImages
+            });
+        } catch (error: any) {
+            console.error("ML: Get published images error:", error);
+            res.status(500).json({ success: false, error: "Failed to get published images" });
         }
     });
 
@@ -2498,7 +2559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error: any) {
             console.error("ML: Download image error:", error);
             if (!res.headersSent) {
-                res.status(500).json({ error: "Failed to download image" });
+                res.status(500).json({ success: false, error: "Failed to download image" });
             }
         }
     });
@@ -2529,14 +2590,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("ML: Get label types error:", error);
-            res.status(500).json({ error: "Failed to fetch label types" });
+            res.status(500).json({ success: false, error: "Failed to fetch label types" });
         }
     });
 
     /**
      * @swagger
      * /api/ML-Engineer/images/labels:
-     *   post:
+     *   get:
      *     summary: Get ground truth labels for a list of images (Bulk)
      *     tags: [ML Engineer]
      *     security:
@@ -2564,12 +2625,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *             schema:
      *               $ref: '#/components/schemas/SuccessResponse'
      */
-    app.post("/api/ML-Engineer/images/labels/", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
+    app.get("/api/ML-Engineer/images/labels", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
         try {
             const { imageIds } = req.body;
 
-            if (!Array.isArray(imageIds)) {
-                return res.status(400).json({ error: "imageIds must be an array" });
+            if (!imageIds || !Array.isArray(imageIds)) {
+                return res.status(400).json({ success: false, error: "imageIds must be an array in the request body" });
+            }
+
+            if (imageIds.length === 0) {
+                return res.status(400).json({ success: false, error: "At least one imageId is required" });
             }
 
             const annotations = await storage.getEnrichedAnnotationsByImageIds(imageIds);
@@ -2581,7 +2646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("ML: Bulk label fetch error:", error);
-            res.status(500).json({ error: "Failed to fetch bulk labels" });
+            res.status(500).json({ success: false, error: "Failed to fetch bulk labels" });
         }
     });
 
@@ -2618,7 +2683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 annotations: annotations
             });
         } catch (error: any) {
-            res.status(500).json({ error: "Failed to fetch labels" });
+            res.status(500).json({ success: false, error: "Failed to fetch labels" });
         }
     });
 
@@ -2669,7 +2734,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         } catch (error: any) {
             console.error("ML: Get project manifest error:", error);
-            res.status(500).json({ error: "Failed to generate project manifest" });
+            res.status(500).json({ success: false, error: "Failed to generate project manifest" });
         }
     });
 
