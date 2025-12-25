@@ -17,6 +17,7 @@ import { db } from "./db";
 import { authenticateToken, requireRole } from "./middlewares/authorize";
 import { validate } from "./middlewares/validation";
 import { sendResetEmail } from "./services/email";
+import { error } from "console";
 
 // Create partial schemas for updates
 const updateLabelSchema = insertLabelSchema.partial();
@@ -110,9 +111,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const data = insertUserSchema.parse(req.body);
             const role = data.role ? data.role : 'annotator';
             // Check if user already exists
-            const existingUser = await storage.getUserByEmail(data.email);
-            if (existingUser) {
-                return res.status(400).json({ error: "User with this email already exists" });
+
+            try {
+                
+                await storage.getUserByEmail(data.email);
+                return res.status(409).json({ error: "User with this email already exists" });
+            } catch (findError: any) {
+                if(findError.message !== "User not found"){
+                    throw findError;
+                }
             }
 
             // Hash password
@@ -127,10 +134,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             // Don't send password back
             const { password, ...userWithoutPassword } = user;
-            res.json(userWithoutPassword);
+            res.status(201).json(userWithoutPassword);
         } catch (error: any) {
             console.error("Registration error:", error);
-            res.status(400).json({ error: error.message || "Registration failed" });
+
+            if(error.issues){
+                return res.status(400).json({error: "Validation failed", details: error.issues})
+            }
+            switch (error.message){
+                case "Invalid user data":
+                    return res.status(400).json({error: "Invalid user data provided"});
+                case "User creation failed":
+                    return res.status(500).json({error: "Failed to create user account"});
+                default:
+                    return res.status(500).json({error: "Internal Server Error"});
+            }
         }
     });
 
@@ -172,9 +190,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             // Find user
-            const user = await storage.getUserByEmail(email);
-            if (!user) {
-                return res.status(401).json({ error: "Invalid credentials" });
+            let user;
+            try {
+                user = await storage.getUserByEmail(email);
+            } catch (findError: any) {
+                if(findError.message=== "User not found"){
+                    return res.status(401).json({error: "Invalid credentials"});
+                }
+                throw findError;
             }
 
             // Verify password
@@ -204,7 +227,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json({ user: userWithoutPassword, token });
         } catch (error: any) {
             console.error("Login error:", error);
-            res.status(500).json({ error: "Login failed" });
+            if (error.meesage === "Failed to fetch user by email"){
+                return res.status(500).json({ error: "Database unavailable"});
+            }
+            res.status(500).json({ error: "Internal Server Error" });
         }
     });
 
@@ -223,8 +249,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.post("/api/auth/logout", (req, res) => {
         req.session?.destroy((err) => {
             if (err) {
-                return res.status(500).json({ error: "Logout failed" });
+                console.error("Logout error:", err);
+                return res.status(500).json({ error: "Failed to Log out" });
             }
+            res.clearCookie("connect.sid");
             res.json({ message: "Logged out successfully" });
         });
     });
@@ -253,15 +281,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             const user = await storage.getUser(userId);
-            if (!user) {
-                return res.status(404).json({ error: "User not found" });
-            }
 
             const { password: _, ...userWithoutPassword } = user;
             res.json(userWithoutPassword);
         } catch (error: any) {
             console.error("Get user error:", error);
-            res.status(500).json({ error: "Failed to get user" });
+            
+            if(error.message === "User not found"){
+                req.session?.destroy(()=>{});
+                return res.status(404).json({error: "User account not found"});
+            }
+
+            if(error.message === "Invalid user id"){
+                return res.status(400).json({ error: "Invalid session data"});
+            }
+            res.status(500).json({ error: "Internal Server Error" });
         }
     });
 
@@ -328,11 +362,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.post("/api/auth/forgot-password", async (req, res) => {
         try {
             const { email } = req.body;
-            const user = await storage.getUserByEmail(email);
 
-            if (!user) {
-                console.log("user Not found, User: " + user)
-                return res.json({ message: "If an account with that email exists, we sent you a link." });
+            if(!email || typeof email !== "string"){
+                return res.status(400).json({ error: "Email is required" });
+            }
+            let user;
+            try {
+                user = await storage.getUserByEmail(email);
+            } catch (findError: any) {
+                if (findError.message === "User not found"){
+                    console.log(`[Security] Forgot password requested for non-existening email: ${email}`);
+                }
+                throw findError;
             }
 
             const token = crypto.randomBytes(20).toString('hex');
@@ -345,11 +386,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // Send actual email
             await sendResetEmail(email, link); 
-            console.log("email: "+email+", Link: "+link);
+            console.log(`[Email] Password reset sent to ${email}`);
+
             res.json({ message: "If an account with that email exists, we sent you a link." });
         } catch (error: any) {
             console.error("Forgot password error:", error);
-            res.status(500).json({ error: "Server error" });
+            res.status(500).json({ error: "Internal Server Error" });
         }
     });
 
@@ -435,10 +477,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const { token, newPassword } = req.body;
 
-            const user = await storage.getUserByResetToken(token);
+            if(!token || !newPassword){
+                return res.status(400).json({error: "Token and new password are required"});
+            }
+            
+            if(newPassword.length < 8){
+                return res.status(400).json({ error: "Password must be at least 8 characters long"});
+            }
 
-            if (!user) {
-                return res.status(400).json({ error: "Password reset token is invalid or has expired." });
+            let user;
+            try {
+                user = await storage.getUserByResetToken(token);
+            } catch (tokenError: any) {
+                if( tokenError.message === "Invalid reset token" || 
+                    tokenError.message === "Reset token not found or expired"){
+                    return res.status(400).json({error: "Password rest link is invalid or has expired."});
+                }
+                throw tokenError;
             }
 
             // Hash new password
@@ -450,7 +505,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json({ message: "Password has been updated." });
         } catch (error: any) {
             console.error("Reset password error:", error);
-            res.status(500).json({ error: "Server error" });
+            
+            if (error.message === "User not found"){
+                return res.status(400).json({error: "Invalid request"});
+            }
+            res.status(500).json({ error: "Internal Server Error" });
         }
     });
 
@@ -562,27 +621,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ error: "Current and new passwords are required" });
             }
 
-            if (newPassword.length < 6) {
-            return res.status(400).json({ error: "New password must be at least 6 characters" });
+            if (newPassword.length < 8) {
+            return res.status(400).json({ error: "New password must be at least 8 characters" });
             }
 
             const user = await storage.getUser(userId);
-            if (!user) return res.status(404).json({ error: "User not found" });
-
+            
             const isValid = await bcrypt.compare(currentPassword, user.password);
             if (!isValid) {
-            return res.status(401).json({ error: "Incorrect current password" });
+                throw new Error("Incorrect current password");
             }
-
+            
             const newHashedPassword = await bcrypt.hash(newPassword, 10);
-
             await storage.updateUserPassword(userId, newHashedPassword);
-
+            
             res.json({ success: true, message: "Password updated successfully" });
-
+            
         } catch (error: any) {
             console.error("Change password error:", error);
-            res.status(500).json({ error: "Failed to update password" });
+            switch(error.message){
+                case "User not found":
+                    return res.status(404).json({error: "User account not found "});
+                case "Incorrect current password":
+                    return res.status(401).json({ error: "Incorrect current password "});
+                case "Invalid user id":
+                    return res.status(400).json({ error: "Invalid session data "});
+                default:
+                    res.status(500).json({ error: "Failed to update password" });
+            }
         }
     });
 
@@ -616,7 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const user = await storage.getUser(userId);
             if (!user || user.role !== 'data_specialist') {
-                return res.status(403).json({ error: "Access denied" });
+                return res.status(403).json({ error: "Access denied: Data Specialists only" });
             }
 
             // Get all users
@@ -630,7 +696,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             res.json(annotators);
         } catch (error: any) {
             console.error("Get users error:", error);
-            res.status(500).json({ error: "Failed to get users" });
+
+            switch (error.message){
+                case "User not found":
+                    return res.status(401).json({ error: "User account no longer exists" });
+                case "Failed to fetch users":
+                    return res.status(500).json({ error: "Database unavailable" });
+                default:
+                    return res.status(500).json({ error: "Inrernal Server Error "}); 
+            }
         }
     });
 
