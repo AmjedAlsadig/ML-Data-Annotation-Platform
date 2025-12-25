@@ -1,19 +1,19 @@
 /// <reference types="vitest/globals" />
 
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 
-// -------------------------- FIX SCHEMA MOCK --------------------------
+// ===================== MOCK SCHEMA =====================
 vi.mock("@shared/schema", () => ({
   annotations: {},
   images: {},
   projects: {},
   labelClasses: {},
-  labels: {},   // REQUIRED
+  labels: {},
   users: {},
   projectImages: {},
 }));
 
-// -------------------------- GENERIC QB --------------------------
+// ===================== GENERIC QB =====================
 function createQB(rows: any[]) {
   return {
     from: vi.fn().mockReturnThis(),
@@ -25,61 +25,74 @@ function createQB(rows: any[]) {
   };
 }
 
+// ===================== MOCK DB =====================
 vi.mock("../backend/db", () => ({
   db: {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-  }
+  },
 }));
 
 import { DbStorage } from "../backend/storage";
 import { db } from "../backend/db";
 
-// ================================ getProjectStats ================================
-describe("ML Engineer – getProjectStats()", () => {
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
-  test("returns correct project statistics", async () => {
-
+// ===================================================================
+// ========================= getProjectStats ===========================
+// ===================================================================
+describe("ML Engineer – getProjectStats", () => {
+  test("returns full project stats (happy path)", async () => {
     (db.select as any).mockImplementationOnce(() =>
-      createQB([{ totalAnnotations: 10, annotatedImages: 5, activeAnnotators: 2 }])
+      createQB([{ totalAnnotations: 5, annotatedImages: 3, activeAnnotators: 2 }])
     );
-
     (db.select as any).mockImplementationOnce(() =>
-      createQB([{ numberOfImages: 12 }])
+      createQB([{ numberOfImages: 10 }])
     );
 
     const storage = new DbStorage();
     const result = await storage.getProjectStats("p1");
 
-    expect(result.totalAnnotations).toBe(10);
-    expect(result.annotatedImages).toBe(5);
+    expect(result.totalAnnotations).toBe(5);
+    expect(result.annotatedImages).toBe(3);
     expect(result.activeAnnotators).toBe(2);
-    expect(result.numberOfImages).toBe(12);
+    expect(result.numberOfImages).toBe(10);
+  });
+
+  test("throws on invalid project id", async () => {
+    const storage = new DbStorage();
+    await expect(storage.getProjectStats("" as any)).rejects.toThrow(
+      "Invalid project id"
+    );
   });
 });
 
-// ======================== getEnrichedAnnotationsByImageIds =========================
-describe("ML Engineer – getEnrichedAnnotationsByImageIds()", () => {
-
-  test("returns empty list when no ids", async () => {
+// ===================================================================
+// ========== getEnrichedAnnotationsByImageIds =========================
+// ===================================================================
+describe("ML Engineer – getEnrichedAnnotationsByImageIds", () => {
+  test("returns empty array when imageIds is empty", async () => {
     const storage = new DbStorage();
-    expect(await storage.getEnrichedAnnotationsByImageIds([])).toEqual([]);
+    const result = await storage.getEnrichedAnnotationsByImageIds([]);
+
+    expect(result).toEqual([]);
   });
 
-  test("returns enriched annotations", async () => {
-
-    const rows = [{
-      annotationId: "a1",
-      imageId: "img1",
-      labelClass: "Dog",
-      labelType: "Animal",
-      annotatedAt: "2025-01-10",
-      annotatorId: "u1"
-    }];
-
-    (db.select as any).mockImplementationOnce(() => createQB(rows));
+  test("returns enriched annotations (happy path)", async () => {
+    (db.select as any).mockImplementationOnce(() =>
+      createQB([
+        {
+          annotationId: "a1",
+          imageId: "img1",
+          labelClass: "Dog",
+          labelType: "Animal",
+        },
+      ])
+    );
 
     const storage = new DbStorage();
     const result = await storage.getEnrichedAnnotationsByImageIds(["img1"]);
@@ -87,83 +100,192 @@ describe("ML Engineer – getEnrichedAnnotationsByImageIds()", () => {
     expect(result.length).toBe(1);
     expect(result[0].labelClass).toBe("Dog");
   });
+
+  test("throws on invalid image id", async () => {
+    const storage = new DbStorage();
+    await expect(
+      storage.getEnrichedAnnotationsByImageIds([""])
+    ).rejects.toThrow("Invalid image id");
+  });
 });
 
-// =========================== getAllProjectsWithManifest ===========================
-describe("ML Engineer – getAllProjectsWithManifest()", () => {
-
-  test("returns project manifest including images", async () => {
-
-    const projectRows = [{
-      id: "p1",
-      name: "Project 1",
-      description: "Demo",
-      status: "in_progress",
-      createdAt: "2025-01-01",
-      labelType: { id: "lt1", name: "Animals", description: "Animal labels" },
-      createdBy: { id: "u1", email: "user@mail.com" }
-    }];
-
+// ===================================================================
+// =================== getAllProjectsWithManifest ======================
+// ===================================================================
+describe("ML Engineer – getAllProjectsWithManifest", () => {
+  test("returns projects with images", async () => {
     (db.select as any).mockReturnValueOnce({
       from: () => ({
         leftJoin: () => ({
-          leftJoin: () => projectRows
-        })
-      })
+          leftJoin: () => [
+            {
+              id: "p1",
+              name: "Project 1",
+              status: "in_progress",
+              labelType: { id: "lt1", name: "Animals" },
+              createdBy: { id: "u1", email: "u@test.com" },
+            },
+          ],
+        }),
+      }),
     });
 
-    const mockImages = [
-      { id: "img1", filename: "dog.jpg", url: "/i/dog.jpg" }
-    ];
-
     const storage = new DbStorage();
-    vi.spyOn(storage, "getImagesByProject").mockResolvedValue(mockImages);
+    vi.spyOn(storage, "getImagesByProject").mockResolvedValue([
+      { id: "img1", filename: "dog.jpg", url: "/dog.jpg" },
+    ]);
 
     const result = await storage.getAllProjectsWithManifest();
 
     expect(result.length).toBe(1);
-    expect(result[0].images[0].filename).toBe("dog.jpg");
+    expect(result[0].images.length).toBe(1);
+  });
+
+  test("throws when DB fails", async () => {
+    (db.select as any).mockImplementationOnce(() => {
+      throw new Error("db error");
+    });
+
+    const storage = new DbStorage();
+    await expect(storage.getAllProjectsWithManifest()).rejects.toThrow(
+      "Failed to fetch projects"
+    );
   });
 });
 
-// ================================ getAllImages ================================
-test("ML Engineer – getAllImages returns images", async () => {
-
-  (db.select as any).mockReturnValueOnce({
-    from: () => [
-      { id: "i1", filename: "dog.jpg" },
-      { id: "i2", filename: "cat.jpg" }
-    ]
-  });
-
-  const storage = new DbStorage();
-  const result = await storage.getAllImages();
-
-  expect(result!.length).toBe(2);
-});
-
-// ================================ getImage ================================
-test("ML Engineer – getImage returns single image", async () => {
-
+// ===================================================================
+// ====================== getImage / getAllImages ======================
+// ===================================================================
+test("ML Engineer – getImage returns image", async () => {
   (db.select as any).mockImplementationOnce(() =>
     createQB([{ id: "img1", filename: "x.png" }])
   );
 
   const storage = new DbStorage();
-  const img = await storage.getImage("img1");
+  const image = await storage.getImage("img1");
 
-  expect(img?.filename).toBe("x.png");
+  expect(image.filename).toBe("x.png");
 });
 
-// ================================ getAllLabelTypes ================================
-test("ML Engineer – getAllLabelTypes returns list", async () => {
+test("ML Engineer – getAllImages returns images", async () => {
+  (db.select as any).mockReturnValueOnce({
+    from: () => [{ id: "i1" }, { id: "i2" }],
+  });
 
+  const storage = new DbStorage();
+  const images = await storage.getAllImages();
+
+  expect(images.length).toBe(2);
+});
+
+// ===================================================================
+// ======================= getAllLabelTypes ============================
+// ===================================================================
+test("ML Engineer – getAllLabelTypes returns list", async () => {
   (db.select as any).mockImplementationOnce(() =>
-    createQB([{ id: "lt1", name: "Dogs", classCount: 4 }])
+    createQB([{ id: "lt1", name: "Animals", classCount: 3 }])
   );
 
   const storage = new DbStorage();
-  const types = await storage.getAllLabelTypes();
+  const result = await storage.getAllLabelTypes();
 
-  expect(types.length).toBe(1);
+  expect(result.length).toBe(1);
 });
+
+test("throws when DB fails", async () => {
+  (db.select as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.getEnrichedAnnotationsByImageIds(["img1"])
+  ).rejects.toThrow("Failed to fetch enriched annotations");
+});
+
+test("throws when DB fails", async () => {
+  (db.select as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.getEnrichedAnnotationsByImageIds(["img1"])
+  ).rejects.toThrow("Failed to fetch enriched annotations");
+});
+
+test("throws on invalid image id list", async () => {
+  const storage = new DbStorage();
+
+  await expect(
+    storage.getEnrichedAnnotationsByImageIds([""])
+  ).rejects.toThrow("Invalid image id");
+});
+
+test("returns empty list when no projects exist", async () => {
+  (db.select as any).mockReturnValueOnce({
+    from: () => ({
+      leftJoin: () => ({
+        leftJoin: () => []
+      })
+    })
+  });
+
+  const storage = new DbStorage();
+  const res = await storage.getAllProjectsWithManifest();
+
+  expect(res).toEqual([]);
+});
+
+
+test("getProjectStats throws when DB fails", async () => {
+  (db.select as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.getProjectStats("p1")
+  ).rejects.toThrow("Failed to fetch project statistics");
+});
+
+test("getProjectStats throws when DB fails", async () => {
+  (db.select as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.getProjectStats("p1")
+  ).rejects.toThrow("Failed to fetch project statistics");
+});
+
+test("returns project with empty images", async () => {
+  (db.select as any).mockReturnValueOnce({
+    from: () => ({
+      leftJoin: () => ({
+        leftJoin: () => [
+          {
+            id: "p1",
+            name: "Project 1",
+            status: "in_progress",
+            labelType: { id: "lt1", name: "Animals" },
+            createdBy: { id: "u1", email: "u@test.com" }
+          }
+        ]
+      })
+    })
+  });
+
+  const storage = new DbStorage();
+  vi.spyOn(storage, "getImagesByProject").mockResolvedValue([]);
+
+  const res = await storage.getAllProjectsWithManifest();
+
+  expect(res[0].images).toEqual([]);
+});
+

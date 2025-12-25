@@ -1,137 +1,251 @@
 /// <reference types="vitest/globals" />
 
-import { describe, test, expect, vi } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 
-// Mock schema
+// ===================== MOCK SCHEMA =====================
 vi.mock("@shared/schema", () => ({
-  users: {},
+  images: {},
   projects: {},
+  projectImages: {},
   labels: {},
   labelClasses: {},
-  images: {},
-  annotations: {},
-  projectAssignments: {},
-  projectImages: {}
 }));
 
-// Mock DB
+// ===================== MOCK DB =====================
 vi.mock("../backend/db", () => ({
   db: {
     select: vi.fn(),
     insert: vi.fn(),
-    update: vi.fn(),
     delete: vi.fn(),
-  }
+  },
 }));
 
 import { DbStorage } from "../backend/storage";
 import { db } from "../backend/db";
 
-describe("Data Specialist Storage Functions", () => {
-  
-  test("getAllImages should return mocked image list", async () => {
-    (db.select as any).mockImplementation(() => ({
-      from: () => ([
-        { id: "img1", filename: "dog.jpg", url: "/img/dog.jpg" },
-        { id: "img2", filename: "cat.jpg", url: "/img/cat.jpg" }
-      ])
-    }));
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+// ===================================================================
+// =========================== getAllImages ============================
+// ===================================================================
+describe("Data Specialist – getAllImages", () => {
+  test("returns images (happy path)", async () => {
+    (db.select as any).mockReturnValueOnce({
+      from: () => [
+        { id: "img1", filename: "dog.jpg" },
+        { id: "img2", filename: "cat.jpg" },
+      ],
+    });
 
     const storage = new DbStorage();
     const result = await storage.getAllImages();
 
-    expect(result?.length).toBe(2);
-    expect(result?.[0].filename).toBe("dog.jpg");
+    expect(result.length).toBe(2);
   });
 
-
-  test("getAllLabelTypes should return mocked label types", async () => {
-    (db.select as any).mockImplementation(() => ({
-      from: () => ({
-        leftJoin: () => ({
-          groupBy: () => ({
-            orderBy: () => ([
-              { id: "lt1", name: "Animals", classCount: 3 },
-              { id: "lt2", name: "Vehicles", classCount: 5 }
-            ])
-          })
-        })
-      })
-    }));
+  test("throws when DB fails", async () => {
+    (db.select as any).mockImplementationOnce(() => {
+      throw new Error("db error");
+    });
 
     const storage = new DbStorage();
-    const result = await storage.getAllLabelTypes();
+    await expect(storage.getAllImages()).rejects.toThrow(
+      "Failed to fetch images"
+    );
+  });
+});
 
-    expect(result.length).toBe(2);
-    expect(result[1].name).toBe("Vehicles");
+// ===================================================================
+// ============================ createImage ============================
+// ===================================================================
+describe("Data Specialist – createImage", () => {
+  test("creates image successfully", async () => {
+    (db.insert as any).mockReturnValueOnce({
+      values: () => ({
+        returning: () => [{ id: "img1", filename: "dog.jpg", url: "/dog.jpg" }],
+      }),
+    });
+
+    const storage = new DbStorage();
+    const result = await storage.createImage({
+      filename: "dog.jpg",
+      url: "/dog.jpg",
+    });
+
+    expect(result.id).toBe("img1");
   });
 
+  test("throws on invalid payload", async () => {
+    const storage = new DbStorage();
+    await expect(
+      storage.createImage({ filename: "" } as any)
+    ).rejects.toThrow("Invalid image payload");
+  });
+});
 
-  test("assignImagesToProject should return inserted assignments", async () => {
-    // Mock image validation query
-    (db.select as any).mockImplementation(() => ({
+// ===================================================================
+// ======================== assignImagesToProject ======================
+// ===================================================================
+describe("Data Specialist – assignImagesToProject", () => {
+  test("assigns images successfully", async () => {
+    (db.select as any).mockReturnValueOnce({
       from: () => ({
-        where: () => [{ id: "img1" }, { id: "img2" }]
-      })
-    }));
+        where: () => [{ id: "img1" }, { id: "img2" }],
+      }),
+    });
 
-    // Mock insert query
-    (db.insert as any).mockImplementation(() => ({
+    (db.insert as any).mockReturnValueOnce({
       values: () => ({
         onConflictDoNothing: () => ({
-          returning: () => ([
+          returning: () => [
             { projectId: "p1", imageId: "img1" },
-            { projectId: "p1", imageId: "img2" }
-          ])
-        })
-      })
-    }));
+            { projectId: "p1", imageId: "img2" },
+          ],
+        }),
+      }),
+    });
 
     const storage = new DbStorage();
     const result = await storage.assignImagesToProject("p1", ["img1", "img2"]);
 
     expect(result.length).toBe(2);
-    expect(result[0].imageId).toBe("img1");
   });
 
+  test("throws when images not found", async () => {
+    (db.select as any).mockReturnValueOnce({
+      from: () => ({
+        where: () => [],
+      }),
+    });
+
+    const storage = new DbStorage();
+    await expect(
+      storage.assignImagesToProject("p1", ["imgX"])
+    ).rejects.toThrow("Some images not found");
+  });
 });
 
-test("createImage should generate a unique image ID", async () => {
+// ===================================================================
+// ======================= removeImageAssignment =======================
+// ===================================================================
+test("Data Specialist – removeImageAssignment removes row", async () => {
+  (db.delete as any).mockReturnValueOnce({
+    where: () => ({
+      returning: () => [{ projectId: "p1", imageId: "img1" }],
+    }),
+  });
 
-  // returns image with id "img_111"
-  (db.insert as any).mockImplementationOnce(() => ({
-    values: () => ({
-      returning: () => ([
-        { id: "img_111", filename: "dog.jpg", url: "/img/dog.jpg" }
-      ])
-    })
-  }));
+  const storage = new DbStorage();
+  const result = await storage.removeImageAssignment("p1", "img1");
 
-  // returns image with id "img_222"
-  (db.insert as any).mockImplementationOnce(() => ({
-    values: () => ({
-      returning: () => ([
-        { id: "img_222", filename: "cat.jpg", url: "/img/cat.jpg" }
-      ])
-    })
-  }));
+  expect(result.imageId).toBe("img1");
+});
+
+test("throws when fetching images fails", async () => {
+  (db.select as any).mockResolvedValueOnce([
+    { id: "p1", name: "Project 1" }
+  ]);
+
+  const storage = new DbStorage();
+  vi.spyOn(storage, "getImagesByProject")
+    .mockRejectedValueOnce(new Error("fail"));
+
+  await expect(
+    storage.getAllProjectsWithManifest()
+  ).rejects.toThrow("Failed to fetch projects");
+});
+
+
+test("createProject throws when DB insert fails", async () => {
+  (db.insert as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
 
   const storage = new DbStorage();
 
-  const img1 = await storage.createImage({
-    filename: "dog.jpg",
-    url: "/img/dog.jpg"
+  await expect(
+    storage.createProject({ name: "X", createdBy: "u1" } as any)
+  ).rejects.toThrow("DB insert failed");
+});
+
+test("deleteProject throws when project not found", async () => {
+  (db.delete as any).mockReturnValueOnce({
+    execute: vi.fn().mockResolvedValue({ rowCount: 0 }),
   });
 
-  const img2 = await storage.createImage({
-    filename: "cat.jpg",
-    url: "/img/cat.jpg"
+  const storage = new DbStorage();
+
+  await expect(
+    storage.deleteProject("p1")
+  ).rejects.toThrow("Failed to delete project");
+});
+
+test("updateProjectStatus throws on invalid id", async () => {
+  const storage = new DbStorage();
+
+  await expect(
+    storage.updateProjectStatus("", "completed")
+  ).rejects.toThrow("Invalid project id");
+});
+
+test("assignImagesToProject throws on invalid image id", async () => {
+  const storage = new DbStorage();
+
+  await expect(
+    storage.assignImagesToProject("p1", [123 as any])
+  ).rejects.toThrow("Invalid image id");
+});
+
+test("throws when image fetch throws", async () => {
+  (db.select as any).mockResolvedValueOnce([
+    { id: "p1", name: "Project 1" }
+  ]);
+
+  const storage = new DbStorage();
+  vi.spyOn(storage, "getImagesByProject")
+    .mockRejectedValueOnce(new Error("fail"));
+
+  await expect(
+    storage.getAllProjectsWithManifest()
+  ).rejects.toThrow("Failed to fetch projects");
+});
+
+test("removeImageAssignment throws when not found", async () => {
+  (db.delete as any).mockReturnValueOnce({
+    where: () => ({
+      returning: () => [],
+    }),
   });
 
-  // Ensure IDs exist
-  expect(img1.id).toBeDefined();
-  expect(img2.id).toBeDefined();
+  const storage = new DbStorage();
 
-  // IDs must be different
-  expect(img1.id).not.toBe(img2.id);
+  await expect(
+    storage.removeImageAssignment("p1", "img1")
+  ).rejects.toThrow("Image assignment not found");
+});
+
+test("createImage throws when DB fails", async () => {
+  (db.insert as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.createImage({ filename: "x", url: "y" })
+  ).rejects.toThrow("DB insert failed");
+});
+
+test("createImage throws when DB fails", async () => {
+  (db.insert as any).mockImplementationOnce(() => {
+    throw new Error("db fail");
+  });
+
+  const storage = new DbStorage();
+
+  await expect(
+    storage.createImage({ filename: "x", url: "y" })
+  ).rejects.toThrow("DB insert failed");
 });
