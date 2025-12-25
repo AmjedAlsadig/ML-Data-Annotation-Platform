@@ -228,7 +228,7 @@ describe("deleteAnnotation", () => {
 
     await expect(storage.deleteAnnotation("1", "999"))
       .rejects
-      .toThrow("not found or access denied");
+      .toThrow("Annotation not found");
   });
 
   test("admin deletes any annotation", async () => {

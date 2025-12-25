@@ -43,28 +43,34 @@ describe("Project storage tests", () => {
   });
 
   test("deleteProject calls db.delete", async () => {
-    (db.delete as any).mockReturnValueOnce({
-      where: () => ({})
-    });
-
-    const storage = new DbStorage();
-    await storage.deleteProject("p1");
-
-    expect(db.delete).toHaveBeenCalled();
+  (db.delete as any).mockReturnValueOnce({
+    where: () => ({
+      execute: () => ({ rowCount: 1 })
+    })
   });
+
+  const storage = new DbStorage();
+  await storage.deleteProject("p1");
+
+  expect(db.delete).toHaveBeenCalled();
+});
+
 
   test("updateProjectStatus updates row", async () => {
-    (db.update as any).mockReturnValueOnce({
-      set: () => ({
-        where: () => ({})
+  (db.update as any).mockReturnValueOnce({
+    set: () => ({
+      where: () => ({
+        execute: () => ({ rowCount: 1 })
       })
-    });
-
-    const storage = new DbStorage();
-    await storage.updateProjectStatus("p1", "completed");
-
-    expect(db.update).toHaveBeenCalled();
+    })
   });
+
+  const storage = new DbStorage();
+  await storage.updateProjectStatus("p1", "completed");
+
+  expect(db.update).toHaveBeenCalled();
+});
+
 
 });
 //////////
