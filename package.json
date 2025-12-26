@@ -17,7 +17,9 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "frontend:dev": "vite"
+    "frontend:dev": "vite",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -123,6 +125,7 @@
     "@vitest/ui": "^4.0.15",
     "autoprefixer": "^10.4.20",
     "cross-env": "^10.1.0",
+    "cypress": "^15.8.1",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
