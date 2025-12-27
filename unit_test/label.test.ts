@@ -286,3 +286,192 @@ describe("Label – removeLabelClass", () => {
     ).rejects.toThrow("Label class not found");
   });
 });
+
+// ===================================================================
+// =========================== Label types ============================
+// ===================================================================
+describe("Label – label types (getAll / getOne / update / delete)", () => {
+  test("getAllLabelTypes returns label types with classCount (happy path)", async () => {
+    const rows = [
+      { id: "l1", name: "Type A", classCount: 2 },
+      { id: "l2", name: "Type B", classCount: 0 },
+    ];
+
+    (db.select as any).mockReturnValueOnce({
+      from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnValue(rows),
+    });
+
+    const storage = new DbStorage();
+    const result = await storage.getAllLabelTypes();
+
+    expect(result.length).toBe(2);
+    expect(result[0].classCount).toBe(2);
+  });
+
+  test("getAllLabelTypes throws when DB fails", async () => {
+    (db.select as any).mockImplementationOnce(() => {
+      throw new Error("db fail");
+    });
+
+    const storage = new DbStorage();
+
+    await expect(storage.getAllLabelTypes()).rejects.toThrow(
+      "Failed to fetch label types"
+    );
+  });
+
+  test("getLabelType returns single label type (happy path)", async () => {
+    const row = { id: "l1", name: "Type A", classCount: 3 };
+
+    (db.select as any).mockReturnValueOnce({
+      from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockReturnValue([row]),
+    });
+
+    const storage = new DbStorage();
+    const result = await storage.getLabelType("l1");
+
+    expect(result?.id).toBe("l1");
+    expect(result?.classCount).toBe(3);
+  });
+
+  test("getLabelType throws on invalid id", async () => {
+    const storage = new DbStorage();
+
+    await expect(
+      storage.getLabelType("" as any)
+    ).rejects.toThrow("Invalid label id");
+  });
+
+  test("getLabelType throws when not found", async () => {
+    (db.select as any).mockReturnValueOnce({
+      from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockReturnValue([]),
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.getLabelType("missing")
+    ).rejects.toThrow("Label type not found");
+  });
+
+  test("getLabelType throws when DB fails", async () => {
+    (db.select as any).mockImplementationOnce(() => {
+      throw new Error("db fail");
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.getLabelType("l1")
+    ).rejects.toThrow("Failed to fetch label type");
+  });
+
+  test("updateLabelType updates and returns label type (happy path)", async () => {
+    const updated = { id: "l1", name: "Updated", description: "desc" };
+
+    (db.update as any).mockReturnValueOnce({
+      set: () => ({
+        where: () => ({
+          returning: () => [updated],
+        }),
+      }),
+    });
+
+    const storage = new DbStorage();
+    const result = await storage.updateLabelType("l1", {
+      name: "Updated",
+    } as any);
+
+    expect(result).toEqual(updated);
+  });
+
+  test("updateLabelType throws on invalid id", async () => {
+    const storage = new DbStorage();
+
+    await expect(
+      storage.updateLabelType("" as any, { name: "x" } as any)
+    ).rejects.toThrow("Invalid label id");
+  });
+
+  test("updateLabelType throws when DB update fails", async () => {
+    (db.update as any).mockImplementationOnce(() => {
+      throw new Error("db fail");
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.updateLabelType("l1", { name: "Updated" } as any)
+    ).rejects.toThrow("Failed to update label type");
+  });
+
+  test("updateLabelType throws when DB returns no row", async () => {
+    (db.update as any).mockReturnValueOnce({
+      set: () => ({
+        where: () => ({
+          returning: () => [],
+        }),
+      }),
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.updateLabelType("l1", { name: "Updated" } as any)
+    ).rejects.toThrow("Label type not found");
+  });
+
+  test("deleteLabelTypes deletes label types (happy path)", async () => {
+    const deleted = [
+      { id: "l1", name: "Type A" },
+      { id: "l2", name: "Type B" },
+    ];
+
+    (db.delete as any).mockReturnValueOnce({
+      where: () => ({
+        returning: () => deleted,
+      }),
+    });
+
+    const storage = new DbStorage();
+    const result = await storage.deleteLabelTypes(["l1", "l2"]);
+
+    expect(result.length).toBe(2);
+    expect(result[0].id).toBe("l1");
+  });
+
+  test("deleteLabelTypes throws when DB delete fails", async () => {
+    (db.delete as any).mockImplementationOnce(() => {
+      throw new Error("db fail");
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.deleteLabelTypes(["l1", "l2"])
+    ).rejects.toThrow("Failed to delete label types");
+  });
+
+  test("deleteLabelTypes throws when nothing deleted", async () => {
+    (db.delete as any).mockReturnValueOnce({
+      where: () => ({
+        returning: () => [],
+      }),
+    });
+
+    const storage = new DbStorage();
+
+    await expect(
+      storage.deleteLabelTypes(["l1"])
+    ).rejects.toThrow("No label types found");
+  });
+});
