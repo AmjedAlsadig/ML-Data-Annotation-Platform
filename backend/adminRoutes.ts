@@ -103,22 +103,28 @@ export function registerAdminRoutes(app: Express) {
       }
 
       // Check if user exists
-      const userToUpdate = await storage.getUser(userIdToUpdate);
-      if (!userToUpdate) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      await storage.getUser(userIdToUpdate);
 
       // Update the role
       await storage.updateUserRole(userIdToUpdate, role);
 
       res.json({
+        success: true,
         message: "User role updated successfully",
         userId: userIdToUpdate,
         newRole: role
       });
     } catch (error: any) {
       console.error("Update user role error:", error);
-      res.status(500).json({ success: false, error: "Failed to update user role" });
+
+        switch (error.message) {
+            case "User not found":
+                return res.status(404).json({ success: false, error: "User not found" });
+            case "Invalid user id":
+                return res.status(400).json({ success: false, error: "Invalid User ID format" });
+            default:
+                return res.status(500).json({ success: false, error: "Failed to update user role" });
+        }
     }
   });
 
@@ -149,12 +155,17 @@ export function registerAdminRoutes(app: Express) {
       const data = insertUserSchema.parse(req.body);
 
       // Check if user already exists
-      const existingUser = await storage.getUserByEmail(data.email);
-      if (existingUser) {
+      try {        
+        await storage.getUserByEmail(data.email);
         return res.status(400).json({
           success: false,
           error: "User with this email already exists"
         });
+        
+      } catch (findError: any) {
+        if (findError.message !== "User not found") {
+          throw findError; // Re-throw real DB errors
+        }
       }
 
       // Hash password
@@ -175,10 +186,10 @@ export function registerAdminRoutes(app: Express) {
       });
     } catch (error: any) {
       console.error("Create user error:", error);
-      res.status(400).json({
-        success: false,
-        error: error.message || "Failed to create user"
-      });
+
+      if (error.issues) return res.status(400).json({ success: false, error: "Validation failed", details: error.issues });
+
+      res.status(500).json({ success: false, error: error.message || "Failed to create user" });
     }
   });
 }

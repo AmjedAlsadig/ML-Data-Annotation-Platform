@@ -7,6 +7,7 @@ import { insertUserSchema, insertProjectSchema, insertLabelSchema, insertImageSc
 import multer from 'multer';
 import { uploadFile, deleteFile, initializeMinio, getFileStream, getFileMetadata, extractObjectNameFromUrl } from './services/minio';
 import { extractImagesFromZip } from './services/zip';
+import { z } from "zod";
 
 import jwt from "jsonwebtoken";
 
@@ -749,40 +750,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       401:
      *         description: Unauthorized
      */
-    app.post("/api/projects", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
+    app.post("/api/projects", authenticateToken, async (req, res) => {
+    try {
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
-            const data = insertProjectSchema.parse({
-                ...req.body,
-                createdBy: userId,
-            });
+        // 1. Validation (Zod)
+        const data = insertProjectSchema.parse({
+            ...req.body,
+            createdBy: userId,
+        });
 
-            const project = await storage.createProject(data);
-            res.json(project);
-        } catch (error: any) {
-            console.error("Create project error:", error);
-            res.status(400).json({ success: false, error: error.message || "Failed to create project" });
+        // 2. Storage Call
+        const project = await storage.createProject(data);
+
+        // 3. Success (201 Created)
+        res.status(201).json(project);
+
+    } catch (error: any) {
+        console.error("Create project error:", error);
+
+        if (error.issues) return res.status(400).json({ success: false, error: "Validation failed", details: error.issues });
+
+        if (error.message === "Invalid project payload") {
+            return res.status(400).json({ success: false, error: "Invalid data provided" });
         }
-    });
 
-    app.delete("/api/projects/:id", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
-            await storage.deleteProject(req.params.id);
-            res.json({ message: "project deleted successfully" });
-        } catch (error: any) {
-            console.error("Delete project error:", error);
-            res.status(500).json({ success: false, error: "Failed to delete project" });
+    app.delete("/api/projects/:id", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
+
+        const project = await storage.getProject(id);
+        
+        if (!project) {
+            return res.status(404).json({ success: false, error: "Project not found" });
         }
-    });
+
+        // Only the creator can delete
+        if (project.createdBy !== userId) {
+            return res.status(403).json({ success: false, error: "Access denied: You do not own this project" });
+        }
+
+        await storage.deleteProject(id);
+
+        // 3. Success
+        res.json({ message: "Project deleted successfully" });
+
+    } catch (error: any) {
+        console.error("Delete project error:", error);
+
+        switch (error.message) {
+            case "Project not found":
+                return res.status(404).json({ success: false, error: "Project not found" });
+            case "Invalid project id":
+                return res.status(400).json({ success: false, error: "Invalid ID format" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+        }
+    }
+});
 
     /**
      * @swagger
@@ -802,31 +834,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       401:
      *         description: Unauthorized
      */
-    app.get("/api/projects", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
+    app.get("/api/projects", authenticateToken, async (req, res) => {
+    try {
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
-            const user = await storage.getUser(userId);
-            if (!user) {
-                return res.status(404).json({ success: false, error: "User not found" });
-            }
+        // 1. Get User Role
+        const user = await storage.getUser(userId); 
 
-            let projects;
-            if (user.role === "data_specialist") {
-                projects = await storage.getProjectsByCreator(userId);
-            } else {
-                projects = await storage.getProjectsByAnnotator(userId);
-            }
-
-            res.json(projects);
-        } catch (error: any) {
-            console.error("Get projects error:", error);
-            res.status(500).json({ success: false, error: "Failed to get projects" });
+        let projects;
+        
+        // Fetch based on Role
+        if (user.role === "data_specialist") {
+            projects = await storage.getProjectsByCreator(userId);
+        } else {
+            projects = await storage.getProjectsByAnnotator(userId);
         }
-    });
+
+        res.json(projects);
+
+    } catch (error: any) {
+        console.error("Get projects error:", error);
+
+        // --- ERROR TREE ---
+        switch (error.message) {
+            // Case A: Session/User Issues
+            case "User not found":
+                // Session exists, but User ID is not in DB (Account deleted?)
+                return res.status(401).json({ success: false, error: "User account issue" });
+            
+            case "Invalid user id":
+                // This implies the session data is corrupted
+                return res.status(400).json({ success: false, error: "Invalid session data" });
+
+            // Case B: Database / Calculation Failures
+            case "Failed to fetch projects":
+            case "Failed to fetch assigned projects":
+            case "Failed to compute project statistics":
+                // These are all server-side issues. We hide the details.
+                return res.status(500).json({ success: false, error: "Unable to load project list" });
+
+            // Case C: Catch-All
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+        }
+    }
+});
 
     /**
      * @swagger
@@ -851,18 +904,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       404:
      *         description: Project not found
      */
-    app.get("/api/projects/:id", async (req, res) => {
-        try {
-            const project = await storage.getProject(req.params.id);
-            if (!project) {
-                return res.status(404).json({ success: false, error: "Project not found" });
-            }
-            res.json(project);
-        } catch (error: any) {
-            console.error("Get project error:", error);
-            res.status(500).json({ success: false, error: "Failed to get project" });
+    app.get("/api/projects/:id", authenticateToken, async (req, res) => {
+    try {
+        const project = await storage.getProject(req.params.id);
+
+        if (!project) {
+            return res.status(404).json({ success: false, error: "Project not found" });
         }
-    });
+
+        res.json(project);
+
+    } catch (error: any) {
+        console.error("Get project error:", error);
+        
+        if (error.message === "Invalid project id") {
+            return res.status(400).json({ success: false, error: "Invalid ID format" });
+        }
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -903,104 +964,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *         description: Server error
      */
     app.post("/api/projects/:id/images", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
-        try {
-            const projectId = req.params.id;
-            const { imageIds } = req.body;
+    try {
+        const projectId = req.params.id;
+        const { imageIds } = req.body;
+        const userId = (req as any).user.id;
 
-            // Verify project exists
-            const project = await storage.getProject(projectId);
-            if (!project) {
-                return res.status(404).json({
-                    success: false,
-                    error: "Project not found"
-                });
-            }
-
-            console.log(project)
-            console.log(req.session.userId)
-            console.log((req as any).user)
-            console.log(imageIds)
-            // Verify user has access to this project
-            const userId = (req as any).user.id;
-            // Data specialists can only assign to their own projects
-            if (project.createdBy !== userId) {
-                return res.status(403).json({
-                    success: false,
-                    error: "You can only assign images to your own projects"
-                });
-            }
-
-            // Assign images to project
-            const assignedImages = await storage.assignImagesToProject(projectId, imageIds);
-
-            res.status(201).json({
-                success: true,
-                data: assignedImages,
-                message: `Successfully assigned ${assignedImages.length} images to project`
-            });
-        } catch (error: any) {
-            console.error("Assign images error:", error);
-            res.status(500).json({
-                success: false,
-                error: "Failed to assign images to project"
-            });
+        const project = await storage.getProject(projectId);
+        
+        if (!project) {
+            return res.status(404).json({ success: false, error: "Project not found" });
         }
-    });
+
+        if (project.createdBy !== userId) {
+            return res.status(403).json({ success: false, error: "You can only assign images to your own projects" });
+        }
+
+        const assignedImages = await storage.assignImagesToProject(projectId, imageIds);
+
+        res.status(201).json({
+            success: true,
+            data: assignedImages,
+            message: `Successfully assigned ${assignedImages.length} images to project`
+        });
+
+    } catch (error: any) {
+        console.error("Assign images error:", error);
+
+        // --- ERROR TREE ---
+        switch (error.message) {
+            case "Some images not found":
+                // This means the user sent IDs that don't exist in the DB -> 400 Bad Request
+                return res.status(400).json({ success: false, error: "One or more image IDs are invalid" });
+            case "Invalid image id list":
+            case "Invalid image id":
+            case "Invalid project id":
+                return res.status(400).json({ success: false, error: "Invalid data provided" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+        }
+    }
+});
 
     app.delete("/api/projects/:id/images/:imageId", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
-        try {
-            const projectId = req.params.id;
-            const imageId = req.params.imageId;
+    try {
+        const projectId = req.params.id;
+        const imageId = req.params.imageId;
+        const userId = (req as any).user.id;
 
-            // Verify project exists
-            const project = await storage.getProject(projectId);
-            if (!project) {
-                return res.status(404).json({
-                    success: false,
-                    error: "Project not found"
-                });
-            }
+        const project = await storage.getProject(projectId);
+        if (!project) return res.status(404).json({ success: false, error: "Project not found" });
 
-            console.log(project)
-            console.log(req.session.userId)
-            console.log((req as any).user)
-            console.log(imageId)
-            // Verify user has access to this project
-            const userId = (req as any).user.id;
-            // Data specialists can only assign to their own projects
-            if (project.createdBy !== userId) {
-                return res.status(403).json({
-                    success: false,
-                    error: "You can only delete images to your own projects"
-                });
-            }
-
-            // Check if image is published
-            const isPublished = await storage.getProjectImagePublishedState(projectId, imageId);
-            if (isPublished) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Cannot delete a published image. Please unpublish it first."
-                });
-            }
-
-            console.log(`[Remove Image assignment: imageId: ${imageId} projectId: ${projectId}`)
-            // Remove image assignment
-            const assignedImages = await storage.removeImageAssignment(projectId, imageId);
-
-            res.status(201).json({
-                success: true,
-                data: assignedImages,
-                message: `Successfully deleted ${assignedImages} images to project`
-            });
-        } catch (error: any) {
-            console.error("remove images error:", error);
-            res.status(500).json({
-                success: false,
-                error: "Failed to assign images to project"
-            });
+        if (project.createdBy !== userId) {
+            return res.status(403).json({ success: false, error: "You can only delete images from your own projects" });
         }
-    });
+
+        const isPublished = await storage.getProjectImagePublishedState(projectId, imageId);
+        
+        if (isPublished) {
+            return res.status(400).json({ success: false, error: "Cannot delete a published image. Please unpublish it first." });
+        }
+
+        const removedImage = await storage.removeImageAssignment(projectId, imageId);
+
+        res.json({
+            success: true,
+            data: removedImage,
+            message: "Image removed from project successfully"
+        });
+
+    } catch (error: any) {
+        console.error("Remove images error:", error);
+
+        switch (error.message) {
+            case "Image assignment not found":
+                // This handles both the getPublishedState check AND the removeAssignment check
+                return res.status(404).json({ success: false, error: "Image is not assigned to this project" });
+            case "Invalid project id":
+            case "Invalid image id":
+                return res.status(400).json({ success: false, error: "Invalid ID format" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+        }
+    }
+});
 
     /**
      * @swagger
@@ -1143,24 +1189,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       401:
      *         description: Unauthorized
      */
-    app.post("/api/projects/:projectId/assignments", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
-            }
+    app.post("/api/projects/:projectId/assignments", authenticateToken, async (req, res) => {
+    try {
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
-            const assignment = await storage.assignUserToProject({
-                projectId: req.params.projectId,
-                userId: req.body.userId,
-            });
+        const { projectId } = req.params;
+        const targetUserId = req.body.userId;
 
-            res.json(assignment);
-        } catch (error: any) {
-            console.error("Assign user error:", error);
-            res.status(400).json({ success: false, error: error.message || "Failed to assign user" });
+        if (!targetUserId) {
+            return res.status(400).json({ success: false, error: "User ID is required" });
         }
-    });
+
+        const assignment = await storage.assignUserToProject({
+            projectId: projectId,
+            userId: targetUserId,
+        });
+
+        res.json(assignment);
+
+    } catch (error: any) {
+        console.error("Assign user error:", error);
+
+        if (error.message === "Invalid project assignment payload") {
+            return res.status(400).json({ success: false, error: "Invalid data provided" });
+        }
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -1181,32 +1238,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       401:
      *         description: Unauthorized
      */
-    app.get("/api/projects/:projectId/assignments", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
+    app.get("/api/projects/:projectId/assignments", authenticateToken, async (req, res) => {
+    try {
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
-            const assignments = await storage.getProjectAssignments(req.params.projectId);
+        const assignments = await storage.getProjectAssignments(req.params.projectId);
 
-            // Get user details for each assignment
-            const assignmentsWithUsers = await Promise.all(
-                assignments.map(async (assignment) => {
+        const assignmentsWithUsers = await Promise.all(
+            assignments.map(async (assignment) => {
+                try {
                     const user = await storage.getUser(assignment.userId);
                     return {
                         ...assignment,
-                        user: user ? { id: user.id, name: user.name, email: user.email } : null,
+                        user: { id: user.id, name: user.name, email: user.email },
                     };
-                })
-            );
+                } catch (userError) {
+                    // If a user was hard-deleted from DB but assignment remains,
+                    // storage.getUser throws "User not found". We catch it here so the
+                    // whole list doesn't fail. We return the assignment with user: null.
+                    return {
+                        ...assignment,
+                        user: null, 
+                    };
+                }
+            })
+        );
 
-            res.json(assignmentsWithUsers);
-        } catch (error: any) {
-            console.error("Get assignments error:", error);
-            res.status(500).json({ success: false, error: "Failed to get assignments" });
+        res.json(assignmentsWithUsers);
+
+    } catch (error: any) {
+        console.error("Get assignments error:", error);
+        
+        if (error.message === "Invalid project id") {
+            return res.status(400).json({ success: false, error: "Invalid Project ID" });
         }
-    });
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     // IMPLEMENT The Delete assignment for a project
 
@@ -1419,10 +1489,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data: images
             });
         } catch (error: any) {
-            console.error("Get images error:", error);
-            res.status(500).json({ success: false, error: "Failed to get images" });
+        console.error("Get images error:", error);
+        if (error.message === "Image not found") {
+            return res.status(404).json({ success: false, error: "Image not found" });
         }
-    });
+        if (error.message === "Invalid project id") {
+            return res.status(400).json({ success: false, error: "Invalid Project ID" });
+        }
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -1482,34 +1558,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *         description: Access denied (data specialist only)
      */
     app.get("/api/portfolio/images", async (req, res) => {
-        try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
+    try {
+        const userId = req.session?.userId;
+        if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
-            const user = await storage.getUser(userId);
-            // if (!user || user.role !== 'data_specialist') {
-            //   return res.status(403).json({ error: "Access denied" });
-            // }
+        // Parse query params safely
+        const { projectId, sortBy, sortOrder, limit, offset } = req.query;
 
-            const { projectId, sortBy, sortOrder, limit, offset } = req.query;
+        const result = await storage.getPortfolioImages(userId, {
+            projectId: projectId as string,
+            sortBy: sortBy as 'uploadedAt' | 'projectName',
+            sortOrder: sortOrder as 'asc' | 'desc',
+            limit: limit ? parseInt(limit as string) : undefined,
+            offset: offset ? parseInt(offset as string) : undefined,
+        });
 
-            const result = await storage.getPortfolioImages(userId, {
-                projectId: projectId as string,
-                sortBy: sortBy as 'uploadedAt' | 'projectName',
-                sortOrder: sortOrder as 'asc' | 'desc',
-                limit: limit ? parseInt(limit as string) : undefined,
-                offset: offset ? parseInt(offset as string) : undefined,
-            });
+        res.json(result);
 
-            // const result = {};
-            res.json(result);
-        } catch (error: any) {
-            console.error("Get portfolio images error:", error);
-            res.status(500).json({ success: false, error: "Failed to get portfolio images" });
-        }
-    });
+    } catch (error: any) {
+        console.error("Get portfolio images error:", error);
+        res.status(500).json({ success: false, error: "Failed to load portfolio" });
+    }
+});
 
     /**
      * @swagger
@@ -1536,14 +1606,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *         description: Server error
      */
     app.get("/api/images", authenticateToken, requireRole(["data_specialist"]), async (req, res) => {
-        try {
-            const images = await storage.getAllImages();
-            res.json(images);
-        } catch (error: any) {
-            console.error("Get images error:", error);
-            res.status(500).json({ success: false, error: "Failed to get images" });
-        }
-    });
+    try {
+        const images = await storage.getAllImages();
+        res.json(images);
+    } catch (error: any) {
+        console.error("Get all images error:", error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -1572,50 +1642,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.delete("/api/images/:id", async (req, res) => {
         try {
             const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ success: false, error: "Not authenticated" });
-            }
-
+            
             // Get image to extract filename
             const image = await storage.getImage(req.params.id);
-            if (!image) {
-                return res.status(404).json({ success: false, error: "Image not found" });
-            }
 
-            // Extract filename from URL (MinIO URLs end with the object name)
-            const urlParts = image.url.split('/');
-            const filename = urlParts[urlParts.length - 1];
+            if (image.url){
 
-            if (filename) {
-                try {
-                    await deleteFile(filename);
-                    console.log(`Deleted file from MinIO: ${filename}`);
-                } catch (error) {
-                    console.warn("Could not delete file from MinIO:", error);
-                    // Continue anyway - delete from DB even if MinIO deletion fails
+                // Extract filename from URL (MinIO URLs end with the object name)
+                const urlParts = image.url.split('/');
+                const filename = urlParts[urlParts.length - 1];
+
+                if (filename) {
+                    try {
+                        await deleteFile(filename);
+                        console.log(`Deleted file from MinIO: ${filename}`);
+                    } catch (error) {
+                        console.warn("Could not delete file from MinIO:", error);
+                        // Continue anyway - delete from DB even if MinIO deletion fails
+                    }
                 }
             }
-
             // Delete from database
             await storage.deleteImage(req.params.id);
 
-            res.json({ message: "Image deleted successfully" });
+            res.json({ success: true, message: "Image deleted successfully" });
         } catch (error: any) {
-            console.error("Delete image error:", error);
-            res.status(500).json({ success: false, error: "Failed to delete image" });
+        console.error("Delete image error:", error);
+
+        // --- ERROR TREE ---
+        switch (error.message) {
+            case "Image not found":
+                return res.status(404).json({ success: false, error: "Image not found" });
+            case "Invalid image id":
+                return res.status(400).json({ success: false, error: "Invalid ID format" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
         }
-    });
+    }
+});
 
     app.get("/api/images/:id", authenticateToken, async (req, res) => {
         try {
             const image = await storage.getImage(req.params.id);
-            if (!image) return res.status(404).json({ error: "Image not found" });
 
             res.json({ success: true, data: image });
-        } catch (err) {
-            res.status(500).json({ success: false, error: "Failed to fetch image" });
+        } catch (error: any) {
+        // Only log 500 errors
+        if (error.message !== "Image not found" && error.message !== "Invalid image id") {
+            console.error("Get image error:", error);
         }
-    });
+
+        switch (error.message) {
+            case "Image not found":
+                return res.status(404).json({ success: false, error: "Image not found" });
+            case "Invalid image id":
+                return res.status(400).json({ success: false, error: "Invalid ID format" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+        }
+    }
+});
 
     // Label routes
     /**
@@ -1639,18 +1725,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       500:
      *         description: Server error
      */
-    app.delete("/api/labels/:id", async (req, res) => {
+    app.delete("/api/labels/:id", authenticateToken, async (req, res) => {
         try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
-            }
+            const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
 
-            await storage.deleteLabel(req.params.id);
+            await storage.deleteLabel(id);
+
             res.json({ message: "Label deleted successfully" });
+
         } catch (error: any) {
             console.error("Delete label error:", error);
-            res.status(500).json({ success: false, error: "Failed to delete label" });
+
+            // --- ERROR TREE ---
+            if (error.issues) return res.status(400).json({ error: "Invalid ID format" });
+
+            switch (error.message) {
+                case "Label not found":
+                    return res.status(404).json({ error: "Label not found" });
+                case "Invalid label id":
+                    return res.status(400).json({ error: "Invalid label ID provided" });
+                default:
+                    return res.status(500).json({ error: "Internal Server Error" });
+            }
         }
     });
 
@@ -1676,24 +1772,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const labels = await storage.getAllLabelTypes();
 
-            if (!labels) {
-                res.status(404).json({
-                    sucess: false,
-                    error: 'Failed to retrieve label types'
-                })
-            }
-
-            res.json({
-                success: true,
-                data: labels
-            });
+            res.json({ success: true, data: labels });
 
         } catch (error: any) {
             console.error('Error listing label types:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error listing label types'
-            });
+            res.status(500).json({ success: false, error: "Internal Server Error" });
         }
     });
 
@@ -1728,25 +1811,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.get('/api/label-types/:id', authenticateToken, async (req, res) => {
         try {
             const { id } = req.params;
+
             const labelType = await storage.getLabelType(id);
 
-            if (!labelType) {
-                res.status(404).json({
-                    success: false,
-                    error: 'Label type not found'
-                });
-            }
+            res.status(200).json({ success: true, data: labelType });
 
-            res.status(200).json({
-                success: true,
-                data: labelType
-            });
         } catch (error: any) {
             console.error('Error fetching label type details:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error fetching label type details'
-            });
+
+            switch (error.message) {
+                case "Label type not found":
+                    return res.status(404).json({ success: false, error: "Label type not found" });
+                case "Invalid label id":
+                    return res.status(400).json({ success: false, error: "Invalid ID format" });
+                default:
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+            }
         }
     });
 
@@ -1781,25 +1861,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *         description: Server error
      */
     app.post('/api/label-types', validate(insertLabelSchema), async (req, res) => {
-        try {
-            const { name, description } = req.body;
+    try {
+        const { name, description } = req.body;
 
-            const newLabel = await storage.createLabel({ name, description });
+        const newLabel = await storage.createLabel({ name, description });
 
-            res.status(201).json({
-                sucess: true,
-                data: newLabel,
-                message: 'Label type created successfully'
-            });
+        res.status(201).json({
+            success: true,
+            data: newLabel,
+            message: 'Label type created successfully'
+        });
 
-        } catch (error) {
-            console.error('Error creating label:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error creating new label '
-            });
+    } catch (error: any) {
+        console.error('Error creating label:', error);
+
+        if (error.message === "Invalid label payload") {
+            return res.status(400).json({ success: false, error: "Invalid data provided" });
         }
-    });
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -1839,7 +1921,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       500:
      *         description: Server error
      */
-    app.patch('/api/label-types/:id', authenticateToken, requireRole(['data_specialist']), validate(updateLabelSchema), async (req, res) => {
+    app.patch('/api/label-types/:id', 
+    authenticateToken, 
+    requireRole(['data_specialist']), 
+    validate(updateLabelSchema), 
+    async (req, res) => {
         try {
             const { id } = req.params;
             const { name, description } = req.body;
@@ -1851,14 +1937,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data: updatedLabel,
                 message: 'Label type updated successfully'
             });
-        } catch (error) {
+
+        } catch (error: any) {
             console.error('Error updating label type:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error updating label type'
-            });
+
+            switch (error.message) {
+                case "Label type not found":
+                    return res.status(404).json({ success: false, error: "Label type not found" });
+                case "Invalid label payload":
+                    return res.status(400).json({ success: false, error: "No update data provided" });
+                default:
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+            }
         }
-    });
+    }
+);
 
     /**
      * @swagger
@@ -1902,24 +1995,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.delete('/api/label-types', authenticateToken, requireRole(['data_specialist']), async (req, res) => {
         try {
             const { ids } = req.body;
-            console.log(ids)
 
+            // 1. Validation (Fail Fast)
             if (!Array.isArray(ids)) {
-                return res.status(400).json({
-                    success: false,
-                    error: "IDs must be provided as an array"
-                });
+                return res.status(400).json({ success: false, error: "IDs must be provided as an array" });
             }
 
+            // 2. Storage Call
+            // Throws "No label types found" (404) or "Invalid label id" (400)
             const deletedLabels = await storage.deleteLabelTypes(ids);
-            res.status(204).json({
+
+            // 3. Success
+            // Changed from 204 to 200 because we ARE returning data (the deleted items)
+            res.status(200).json({
                 success: true,
                 data: deletedLabels,
-                message: `Successfully deleted  ${deletedLabels.length} label type(s)`
+                message: `Successfully deleted ${deletedLabels.length} label type(s)`
             });
+
         } catch (error: any) {
-            console.error("Delete label error:", error);
-            res.status(500).json({ success: false, error: "Failed to delete label" });
+            console.error("Delete label types error:", error);
+
+            switch (error.message) {
+                case "No label types found":
+                    return res.status(404).json({ success: false, error: "No matching label types found" });
+                case "Invalid label id list":
+                case "Invalid label id":
+                    return res.status(400).json({ success: false, error: "Invalid ID format provided" });
+                default:
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+            }
         }
     });
 
@@ -1963,26 +2068,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const { id } = req.params;
 
-            const typeClass = await storage.getLabelClassesByType(id);
+            const typeClasses = await storage.getLabelClassesByType(id);
 
-            if (!typeClass) {
-                res.status(404).json({
-                    scucess: false,
-                    error: 'Class not Found'
-                });
+            res.json({
+                success: true,
+                data: typeClasses,
+            });
+
+        } catch (error: any) {
+            console.error('Error fetching classes:', error);
+
+            if (error.message === "Invalid label type id") {
+                return res.status(400).json({ success: false, error: "Invalid Label Type ID" });
             }
 
-            res.status(200).json({
-                sucess: true,
-                data: typeClass,
-            });
-
-        } catch (error) {
-            console.error('Error fetching class:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error fetching class '
-            });
+            res.status(500).json({ success: false, error: "Internal Server Error" });
         }
     });
 
@@ -2024,25 +2124,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       500:
      *         description: Server error
      */
-    app.post('/api/label-types/:id/classes', authenticateToken, requireRole(['data_specialist']), validate(insertLabelClassSchema, { mergeData: (req) => ({ labelTypeId: req.params.id }) }),
+    app.post('/api/label-types/:id/classes', 
+        authenticateToken, 
+        requireRole(['data_specialist']), 
+        validate(insertLabelClassSchema, { mergeData: (req) => ({ labelTypeId: req.params.id }) }),
         async (req, res) => {
             try {
                 const newClass = await storage.addLabelClass(req.body);
 
                 res.status(201).json({
-                    sucess: true,
+                    success: true,
                     data: newClass,
-                    message: 'class added successfully'
+                    message: 'Class added successfully'
                 });
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error adding class:', error);
-                res.status(500).json({
-                    success: false,
-                    error: 'Error adding new class '
-                });
+
+                if (error.message === "Invalid label class payload") {
+                    return res.status(400).json({ success: false, error: "Invalid data provided" });
+                }
+
+                res.status(500).json({ success: false, error: "Internal Server Error" });
             }
-        });
+        }
+    );
 
     /**
      * @swagger
@@ -2089,18 +2195,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const deletedClass = await storage.removeLabelClass(id, classId);
 
-            res.status(201).json({
-                sucess: true,
+            res.json({
+                success: true,
                 data: deletedClass,
-                message: 'class removed successfully'
+                message: 'Class removed successfully'
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error removing class:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error removing new class '
-            });
+
+            switch (error.message) {
+                case "Label class not found":
+                    return res.status(404).json({ success: false, error: "Label class not found" });
+                case "Invalid label type id":
+                case "Invalid label class id":
+                    return res.status(400).json({ success: false, error: "Invalid ID format" });
+                default:
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+            }
         }
     });
 
@@ -2146,10 +2258,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const annotation = await storage.createAnnotation(data);
             res.json(annotation);
         } catch (error: any) {
-            console.error("Create annotation error:", error);
-            res.status(400).json({ error: error.message || "Failed to create annotation" });
+        console.error("Create annotation error:", error);
+
+        if (error.issues) return res.status(400).json({ error: "Validation failed", details: error.issues });
+
+        switch (error.message) {
+            case "Invalid annotation payload":
+                return res.status(400).json({ error: "Invalid data provided" });
+            case "Annotation update failed":
+            case "Annotation creation failed":
+                return res.status(500).json({ error: "Database operation failed" });
+            default:
+                return res.status(500).json({ error: "Internal Server Error" });
         }
-    });
+    }
+});
 
     /**
      * @swagger
@@ -2179,10 +2302,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const annotations = await storage.getAnnotationsByImage(req.params.imageId);
             res.json(annotations);
         } catch (error: any) {
-            console.error("Get annotations error:", error);
-            res.status(500).json({ success: false, error: "Failed to get annotations" });
+        console.error("Get annotations error:", error);
+
+        if (error.message === "Invalid image id") {
+            return res.status(400).json({ success: false, error: "Invalid Image ID" });
         }
-    });
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -2220,28 +2348,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.get('/api/annotation/project/:projectId', authenticateToken, requireRole(['annotator']), async (req, res) => {
         try {
-            const { id } = req.params;
-            const annotations = await storage.getAnnotationsByProject(id);
+            const { projectId } = req.params;
+            const annotations = await storage.getAnnotationsByProject(projectId);
 
-            if (!annotations) {
-                res.status(404).json({
-                    success: false,
-                    error: 'Project not found'
-                });
-            }
 
             res.status(200).json({
                 success: true,
                 data: annotations
             });
         } catch (error: any) {
-            console.error('Error fetching annotations for the project', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error fetching annotations for the project'
-            });
+        console.error('Error fetching annotations for the project', error);
+
+        if (error.message === "Invalid project id") {
+            return res.status(400).json({ success: false, error: "Invalid Project ID" });
         }
-    });
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
@@ -2280,25 +2404,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const { id } = req.params;
             const annotation = await storage.getAnnotation(id);
 
-            if (!annotation) {
-                res.status(404).json({
-                    success: false,
-                    error: 'annotation not found'
-                });
-            }
 
             res.status(200).json({
                 success: true,
                 data: annotation
             });
         } catch (error: any) {
-            console.error('Error fetching annotation', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error fetching annotation'
-            });
+        console.error('Error fetching annotation', error);
+
+        switch (error.message) {
+            case "Annotation not found":
+                return res.status(404).json({ success: false, error: "Annotation not found" });
+            case "Invalid annotation id":
+                return res.status(400).json({ success: false, error: "Invalid Annotation ID" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
         }
-    });
+    }
+});
 
     /**
      * @swagger
@@ -2344,14 +2467,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: 'annotation deleted successfully'
             });
 
-        } catch (error) {
-            console.error('Error deleting annotation:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error deleting annotation '
-            });
+        } catch (error: any) {
+        console.error('Error deleting annotation:', error);
+
+        switch (error.message) {
+            case "Annotation not found":
+                return res.status(404).json({ success: false, error: "Annotation not found" });
+            case "Invalid annotation id":
+                return res.status(400).json({ success: false, error: "Invalid Annotation ID" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
         }
-    });
+    }
+});
 
     // Statistics
 
@@ -2403,14 +2531,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data: stats,
             });
 
-        } catch (error) {
-            console.error('Error fetching annotation statistics', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error fetching annotation statistics'
-            });
+        } catch (error: any) {
+        console.error('Error fetching annotation statistics', error);
+
+        if (error.message === "Invalid project id") {
+            return res.status(400).json({ success: false, error: "Invalid Project ID" });
         }
-    });
+
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     // ML Engineer Endpoints
     /**
@@ -2529,15 +2659,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const image = await storage.getImage(id);
 
-            if (!image) {
-                return res.status(404).json({ error: "Image not found" });
-            }
-
             const urlParts = image.url.split('/');
             const filename = urlParts[urlParts.length - 1];
 
             if (!filename) {
-                return res.status(400).json({ error: "Invalid file path" });
+                console.error(`[Data Integrity] Image ${id} has malformed URL: ${image.url}`);
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
             }
 
             const ext = filename.split('.').pop()?.toLowerCase();
@@ -2557,12 +2684,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
 
         } catch (error: any) {
-            console.error("ML: Download image error:", error);
-            if (!res.headersSent) {
-                res.status(500).json({ success: false, error: "Failed to download image" });
+        console.error("ML: Download image error:", error);
+
+        if (!res.headersSent) {
+            switch (error.message) {
+                case "Image not found":
+                    return res.status(404).json({ success: false, error: "Image not found" });
+                case "Invalid image id":
+                    return res.status(400).json({ success: false, error: "Invalid ID format" });
+                default:
+                    return res.status(500).json({ success: false, error: "Failed to download image" });
             }
         }
-    });
+    }
+});
 
     /**
      * @swagger
@@ -2629,14 +2764,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
             const { imageIds } = req.body;
 
-            if (!imageIds || !Array.isArray(imageIds)) {
-                return res.status(400).json({ success: false, error: "imageIds must be an array in the request body" });
-            }
-
-            if (imageIds.length === 0) {
-                return res.status(400).json({ success: false, error: "At least one imageId is required" });
-            }
-
             const annotations = await storage.getEnrichedAnnotationsByImageIds(imageIds);
 
             res.json({
@@ -2645,10 +2772,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data: annotations
             });
         } catch (error: any) {
-            console.error("ML: Bulk label fetch error:", error);
-            res.status(500).json({ success: false, error: "Failed to fetch bulk labels" });
+        console.error("ML: Bulk label fetch error:", error);
+
+        switch (error.message) {
+            case "Invalid image id list":
+            case "Invalid image id":
+                return res.status(400).json({ success: false, error: "Invalid image IDs provided" });
+            default:
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
         }
-    });
+    }
+});
 
     /**
      * @swagger
@@ -2683,9 +2817,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 annotations: annotations
             });
         } catch (error: any) {
-            res.status(500).json({ success: false, error: "Failed to fetch labels" });
+        if (error.message === "Invalid image id") {
+            return res.status(400).json({ success: false, error: "Invalid Image ID" });
         }
-    });
+        
+        console.error("ML: Get single label error:", error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
     /**
      * @swagger
