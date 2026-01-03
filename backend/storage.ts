@@ -317,6 +317,33 @@ async getUserByEmail(email: string): Promise<User> {
   }
 }
 
+// Get all images with their published status from project assignments
+  async getAllImagesWithPublishStatus(): Promise<{
+    id: string;
+    filename: string;
+    url: string;
+    uploadedAt: Date;
+    projectId: string | null;
+    projectName: string | null;
+    published: boolean | null;
+  }[]> {
+    const result = await db
+      .select({
+        id: images.id,
+        filename: images.filename,
+        url: images.url,
+        uploadedAt: images.uploadedAt,
+        projectId: projectImages.projectId,
+        projectName: projects.name,
+        published: projectImages.published,
+      })
+      .from(images)
+      .leftJoin(projectImages, eq(images.id, projectImages.imageId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
+      .orderBy(images.uploadedAt);
+
+    return result;
+  }
   
   // Project methods == testing in storage-basic.test.ts
 
