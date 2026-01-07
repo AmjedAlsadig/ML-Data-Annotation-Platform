@@ -539,7 +539,6 @@ export default function AnnotationInterface() {
         {/* Sidebar */}
         <aside className="w-64 border-r bg-card p-6 space-y-6">
           <div>
-            <h2 className="text-lg font-semibold mb-2">My profile</h2>
             <Button
               variant="ghost"
               className="w-full justify-start gap-2"
@@ -548,13 +547,6 @@ export default function AnnotationInterface() {
             >
               <ArrowLeft className="w-4 h-4" />
               Dashboard
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full justify-start mt-2"
-              data-testid="button-my-projects"
-            >
-              My projects
             </Button>
           </div>
         </aside>

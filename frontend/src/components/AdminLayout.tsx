@@ -118,7 +118,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-64 min-h-[calc(100vh-4rem)] bg-muted/30 border-r p-6">
-          <h1 className="text-2xl font-bold mb-8">My profile</h1>
           <nav className="flex flex-col space-y-2">
             <button
               onClick={() => setLocation('/admin/create-account')}

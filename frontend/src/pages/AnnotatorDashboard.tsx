@@ -169,11 +169,7 @@ export default function AnnotatorDashboard() {
           <div className="max-w-7xl mx-auto space-y-8">
             {/* Welcome Section */}
             <div>
-              <h1 className="text-3xl font-bold mb-2">My profile</h1>
-              <div className="flex items-center gap-4 mt-6">
-                <Button variant="default" data-testid="button-dashboard">Dashboard</Button>
-                <Button variant="secondary" data-testid="button-my-projects">My projects</Button>
-              </div>
+              <h1 className="text-3xl font-bold mb-2">Annotator Dashboard</h1>
             </div>
 
             {/* Error Alert */}

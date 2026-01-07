@@ -156,19 +156,33 @@ export default function ImagePortfolio() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <span className="font-semibold">VT-Annotator</span>
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" className="text-primary-foreground" />
+                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground" />
+              </svg>
+            </div>
+            <span className="text-lg font-semibold">VT-Annotator</span>
+          </div>
 
-          <div
-            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
-            onClick={() => setLocation('/profile')}>
-            <span>{user?.name}</span>
-            <Avatar className="w-8 h-8">
-              <AvatarFallback>
-                {user ? getUserInitials(user.name) : 'DS'}
-              </AvatarFallback>
-            </Avatar>
+          {/* User Info */}
+          <div className="flex items-center gap-4">
+            <div
+              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
+              onClick={() => setLocation('/profile')}
+            >
+              <span className="text-sm text-muted-foreground hidden sm:inline">Hello</span>
+              <span className="text-sm font-medium">{user?.name}</span>
+              <Avatar className="w-8 h-8">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {user ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2) : 'DS'}
+                </AvatarFallback>
+              </Avatar>
+            </div>
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
