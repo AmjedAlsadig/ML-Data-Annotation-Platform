@@ -109,14 +109,45 @@ export default function UserProfile() {
 
         {/* USER INFO */}
         {user && (
-          <div className="space-y-2 text-sm">
-            <p><strong>Name:</strong> {user.firstName} {user.lastName}</p>
-            <p><strong>Email:</strong> {user.email}</p>
-            <p><strong>Role:</strong> {user.role}</p>
-            <p>
-              <strong>Member since:</strong>{" "}
-              {new Date(user.createdAt).toLocaleDateString()}
-            </p>
+          <div className="relative overflow-hidden rounded-2xl border bg-background shadow-sm">
+            {/* Accent header */}
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary/70 to-primary/40" />
+
+            <div className="p-6 space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold tracking-tight">
+                    {user.firstName} {user.lastName}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Personal account information
+                  </p>
+                </div>
+
+                <div className="px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
+                  {user.role}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-muted" />
+
+              {/* Info grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
+                <div>
+                  <p className="text-muted-foreground mb-1">Email address</p>
+                  <p className="font-medium break-all">{user.email}</p>
+                </div>
+
+                <div>
+                  <p className="text-muted-foreground mb-1">Member since</p>
+                  <p className="font-medium">
+                    {new Date(user.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
