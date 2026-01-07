@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { storage } from "./storage";
 import { insertUserSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
+import { authenticateToken, requireRole } from "./middlewares/authorize";
 
 // Middleware to verify admin access
 const requireAdmin = async (req: any, res: any, next: any) => {
@@ -40,7 +41,7 @@ export function registerAdminRoutes(app: Express) {
    *       403:
    *         description: Access denied
    */
-  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  app.get("/api/admin/users", authenticateToken, requireRole(["admin"]), async (req, res) => {
     try {
       const users = await storage.getAllUsers();
 

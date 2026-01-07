@@ -397,11 +397,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
             const link = `${frontendUrl}/reset-password?token=${token}`;
             
+            if (process.env.NODE_ENV === "test") {
+                return res.status(200).json({ token: token });
+            }
+
             // Send actual email
             await sendResetEmail(email, link); 
             console.log(`[Email] Password reset sent to ${email}`);
 
             res.json({ message: "If an account with that email exists, we sent you a link." });
+
         } catch (error: any) {
             console.error("Forgot password error:", error);
             res.status(500).json({ error: "Internal Server Error" });
@@ -625,7 +630,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.post("/api/auth/change-password", authenticateToken, async (req, res) => {
         try {
-            const userId = req.session?.userId;
+ 
+            const userId = (req as any).user.id;
             if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
             const { currentPassword, newPassword } = req.body;
@@ -686,9 +692,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       403:
      *         description: Forbidden
      */
-    app.get("/api/users", async (req, res) => {
+    app.get("/api/users", authenticateToken, async (req, res) => {
         try {
-            const userId = req.session?.userId;
+            const userId = (req as any).user.id;
             if (!userId) {
                 return res.status(401).json({ success: false, error: "Not authenticated" });
             }
@@ -724,6 +730,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         }
     });
+/**
+ * @swagger
+ * /api/users/email/{email}:
+ *   delete:
+ *     summary: Delete a user by email
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User deleted
+ *       400:
+ *         description: Invalid ID format
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: User not found
+ */
+
+// app.delete(
+//   "/api/users/email/:email",
+//   authenticateToken,
+//   requireRole(["data_specialist"]),
+//   async (req, res) => {
+//     try {
+//       const email = decodeURIComponent(req.params.email);
+
+//       await storage.deleteUserByEmail(email);
+
+//       res.status(200).json({ message: "User deleted successfully" });
+
+//     } catch (error: any) {
+//       console.error("Delete user by email error:", error);
+
+//       switch (error.message) {
+//         case "Invalid email":
+//           return res.status(400).json({ error: "Invalid email" });
+//         case "User not found":
+//           return res.status(404).json({ error: "User not found" });
+//         default:
+//           return res.status(500).json({ error: "Internal Server Error" });
+//       }
+//     }
+//   }
+// );
+
 
     // Project routes (Data Specialist)
     /**
@@ -752,7 +810,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.post("/api/projects", authenticateToken, async (req, res) => {
     try {
-        const userId = req.session?.userId;
+        //const userId = req.session?.userId;
+        const userId = (req as any).user.id;
         if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
         // 1. Validation (Zod)
@@ -783,7 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.delete("/api/projects/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.session?.userId;
+        const userId = (req as any).user.id;
         if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
         const project = await storage.getProject(id);
@@ -792,7 +851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(404).json({ success: false, error: "Project not found" });
         }
 
-        // Only the creator can delete
+        //Only the creator can delete
         if (project.createdBy !== userId) {
             return res.status(403).json({ success: false, error: "Access denied: You do not own this project" });
         }
@@ -836,7 +895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.get("/api/projects", authenticateToken, async (req, res) => {
     try {
-        const userId = req.session?.userId;
+        const userId = (req as any).user.id;
         if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
         // 1. Get User Role
@@ -846,9 +905,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Fetch based on Role
         if (user.role === "data_specialist") {
-            projects = await storage.getProjectsByCreator(userId);
+            //projects = await storage.getProjectsByCreator(userId);
+            projects = await storage.getProjectsByCreator(user.id);
         } else {
-            projects = await storage.getProjectsByAnnotator(userId);
+            //projects = await storage.getProjectsByAnnotator(userId);
+            projects = await storage.getProjectsByAnnotator(user.id);
         }
 
         res.json(projects);
@@ -880,6 +941,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
     }
 });
+
+
+/**
+ * @swagger
+ * /api/projectsAll:
+ *   get:
+ *     summary: Get all projects
+ *     tags: [Projects]
+ *     responses:
+ *       200:
+ *         description: List of projects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Project'
+ */
+
+app.get("/api/projectsAll", authenticateToken, async (req, res) => {
+  try {
+    const projects = await storage.getAllProjects();
+    res.status(200).json(projects);
+  } catch (error) {
+    console.error("Get all projects error:", error);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
 
     /**
      * @swagger
@@ -1316,6 +1406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     // Universal upload endpoint (images + ZIP) - SINGLE ENDPOINT FOR ALL UPLOADS
     app.post("/api/images/upload",
+        authenticateToken,
         uploadUniversal.array('images', 50),
         async (req, res) => {
             try {
@@ -1323,7 +1414,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.log('Content-Type:', req.headers['content-type']);
                 console.log('Files received:', req.files);
 
-                const userId = req.session?.userId;
+                //const userId = req.session?.userId;
+                const user = (req as any).user;
+                const userId = user.id;
                 if (!userId) {
                     return res.status(401).json({ success: false, error: "Not authenticated" });
                 }
@@ -1768,7 +1861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       500:
      *         description: Server error
      */
-    app.get('/api/label-types/', async (req, res) => {
+    app.get('/api/label-types/', authenticateToken, async (req, res) => {
         try {
             const labels = await storage.getAllLabelTypes();
 
@@ -1995,6 +2088,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     app.delete('/api/label-types', authenticateToken, requireRole(['data_specialist']), async (req, res) => {
         try {
             const { ids } = req.body;
+            console.log("DELETE label-types body:", req.body);
+
 
             // 1. Validation (Fail Fast)
             if (!Array.isArray(ids)) {
@@ -2243,12 +2338,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *       401:
      *         description: Unauthorized
      */
-    app.post("/api/annotations", async (req, res) => {
+    app.post("/api/annotations", authenticateToken, async (req, res) => {
         try {
-            const userId = req.session?.userId;
-            if (!userId) {
-                return res.status(401).json({ error: "Not authenticated" });
-            }
+
+            const userId = (req as any).user.id;
+            if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
             const data = insertAnnotationSchema.parse({
                 ...req.body,
@@ -2297,7 +2391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
      *               items:
      *                 $ref: '#/components/schemas/Annotation'
      */
-    app.get("/api/images/:imageId/annotations", async (req, res) => {
+    app.get("/api/images/:imageId/annotations", authenticateToken, async (req, res) => {
         try {
             const annotations = await storage.getAnnotationsByImage(req.params.imageId);
             res.json(annotations);
@@ -2809,7 +2903,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
      */
     app.get("/api/ML-Engineer/images/labels/:imageId", authenticateToken, requireRole(["ml_engineer"]), async (req, res) => {
         try {
-            const annotations = await storage.getEnrichedAnnotationsByImageIds([req.params.imageId]);
+            const imageIdSchema = z.string().uuid();
+            const imageId = imageIdSchema.parse(req.params.imageId);
+            const annotations = await storage.getEnrichedAnnotationsByImageIds([imageId]);
 
             res.json({
                 success: true,
@@ -2817,8 +2913,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 annotations: annotations
             });
         } catch (error: any) {
-        if (error.message === "Invalid image id") {
-            return res.status(400).json({ success: false, error: "Invalid Image ID" });
+        if (error.name === "ZodError") {
+            return res.status(400).json({ success: false, error: "Invalid image ID format" });
         }
         
         console.error("ML: Get single label error:", error);

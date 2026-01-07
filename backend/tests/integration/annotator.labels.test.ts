@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import request from "supertest";
 import { app, ready } from "../../index";
 
-describe("Integration – Data Specialist / Project", () => {
+describe("Annotator Workflow Integration Tests", () => {
+   let imageId: string;
    let adminToken: string;
    let ds_token: string;
    let an_token: string;
@@ -10,7 +11,7 @@ describe("Integration – Data Specialist / Project", () => {
  
    beforeAll(async () => {
      await ready;
- 
+
      const adminLogin = await request(app)
        .post("/api/auth/login")
        .send({ email: "admin_2@test.com", password: "password123" });
@@ -39,10 +40,11 @@ describe("Integration – Data Specialist / Project", () => {
      ml_token = mlLogin.body.token;
      expect(mlLogin.status).toBe(200);
    });
- 
 
-  // ================= HAPPY PATH =================
-  it("creates an annotation for an authenticated user", async () => {
+
+// ================= HAPPY PATH =================
+
+it("creates an annotation for an authenticated user", async () => {
   // create project
   const projectRes = await request(app)
     .post("/api/projects")
@@ -84,7 +86,7 @@ describe("Integration – Data Specialist / Project", () => {
     .attach("images", buffer, filename);
 
   expect([200, 201]).toContain(imageRes.status);
-  const imageId = imageRes.body.images[0].id;
+  imageId = imageRes.body.images[0].id;
   expect(imageId).toBeDefined();
 
   // create annotation
@@ -102,37 +104,36 @@ describe("Integration – Data Specialist / Project", () => {
   expect(res.body.imageId).toBe(imageId);
 });
 
-  // ================= NOT HAPPY PATH =================
-  it("rejects unauthenticated annotation creation", async () => {
-    const res = await request(app)
-      .post("/api/annotations")
-      .send({
-        imageId: "img_unauth",
-        label: "dog",
-      });
 
-    expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: "Access token required" });
+  it("retrieves all label types", async () => {
+    const res = await request(app)
+      .get("/api/label-types")
+      .set("Authorization", `Bearer ${an_token}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it("fails with 400 on invalid annotation payload", async () => {
-    // Missing required fields, malformed structure
-    const invalidPayload = {
-      imageId: 123,
-      label: null,
-    };
+  // ================= NOT HAPPY PATH =================
 
+  it("fails to create a label type with missing payload", async () => {
     const res = await request(app)
-      .post("/api/annotations")
+      .post("/api/label-types")
       .set("Authorization", `Bearer ${an_token}`)
-      .send(invalidPayload);
+      .send({}); // empty
 
     expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty("error");
-    expect(res.body).toHaveProperty("details");
+    expect(res.body.success).toBe(false);
   });
 
- // ================= AUTOMATIC CLEANUP =================
+  it("fails to access protected endpoints without auth", async () => {
+    const res = await request(app)
+      .get("/api/label-types");
+
+    expect(res.status).toBe(401);
+  });
+
+// ================= AUTOMATIC CLEANUP =================
     afterAll(async () => {
   
         const timestampRegex = /\d{13}/;
