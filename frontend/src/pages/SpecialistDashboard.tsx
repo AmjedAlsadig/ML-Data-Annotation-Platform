@@ -138,6 +138,7 @@ export default function SpecialistDashboard() {
       const response = await fetch('/api/portfolio/images', {
         headers: {
           'Authorization': `Bearer ${token}`,
+          "Cache-Control": "no-store"
         },
       });
 
@@ -203,6 +204,7 @@ export default function SpecialistDashboard() {
       const response = await fetch('/api/portfolio/images', {
         headers: {
           'Authorization': `Bearer ${token}`,
+          "Cache-Control": "no-store"
         },
       });
 

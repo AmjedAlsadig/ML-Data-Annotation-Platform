@@ -77,6 +77,7 @@ export function usePortfolio() {
       const response = await fetch(`/api/portfolio/images?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          "Cache-Control": "no-store"
         },
       });
 
@@ -115,6 +116,7 @@ export function usePortfolio() {
       const response = await fetch('/api/portfolio/images', {
         headers: {
           'Authorization': `Bearer ${token}`,
+          "Cache-Control": "no-store"
         },
       });
 

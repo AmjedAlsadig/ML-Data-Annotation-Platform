@@ -32,6 +32,12 @@ const PortfolioUpload = ({ onUploadSuccess }: PortfolioUploadProps) => {
         setIsUploading(true);
         setUploadResult(null);
 
+        const token = localStorage.getItem("authToken");
+
+        if (!token) {
+        throw new Error("User not authenticated");
+        }
+
         const formData = new FormData();
         files.forEach(file => {
             formData.append('images', file);
@@ -40,7 +46,10 @@ const PortfolioUpload = ({ onUploadSuccess }: PortfolioUploadProps) => {
         try {
             const response = await fetch('/api/images/upload', {
                 method: 'POST',
-                credentials: 'include',
+                //credentials: 'include',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                },
                 body: formData,
             });
 

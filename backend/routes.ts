@@ -1650,9 +1650,11 @@ app.get("/api/projectsAll", authenticateToken, async (req, res) => {
      *       403:
      *         description: Access denied (data specialist only)
      */
-    app.get("/api/portfolio/images", async (req, res) => {
+    app.get("/api/portfolio/images", authenticateToken, async (req, res) => {
     try {
-        const userId = req.session?.userId;
+        const user = (req as any).user;
+        const userId = user.id;
+        //const userId = req.session?.userId;
         if (!userId) return res.status(401).json({ success: false, error: "Not authenticated" });
 
         // Parse query params safely

@@ -28,9 +28,16 @@ export default function AssignRole() {
     try {
       setIsLoading(true);
       setError(null);
+      
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
 
       const response = await fetch('/api/admin/users', {
-        credentials: 'include',
+        // credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          "Cache-Control": "no-store"
+        }
       });
 
       if (!response.ok) {
@@ -55,12 +62,16 @@ export default function AssignRole() {
   const handleConfirm = async (userId: string) => {
     const newRole = pendingChanges.get(userId);
     if (!newRole) return;
-
+    
+    const token = localStorage.getItem('authToken');
+    if (!token) return;
+    
     try {
       const response = await fetch(`/api/admin/users/${userId}/role`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ role: newRole }),
         credentials: 'include',

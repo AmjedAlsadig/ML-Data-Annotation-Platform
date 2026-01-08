@@ -30,13 +30,17 @@ export default function CreateAccount() {
     setIsLoading(true);
 
     try {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(formData),
-        credentials: 'include',
+        //credentials: 'include',
       });
 
       const data = await response.json();

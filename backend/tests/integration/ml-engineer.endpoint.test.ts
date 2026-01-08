@@ -38,6 +38,8 @@ describe("Integration – ML Engineer Endpoints", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     res.body.data.forEach((img: any) => expect(img.published).toBe(true));
+
+    console.log(res.body.data);
   });
 
   it("GET /api/ML-Engineer/label-types – success", async () => {
