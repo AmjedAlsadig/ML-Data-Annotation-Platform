@@ -1,3 +1,5 @@
+/// <reference types="cypress" />
+
 describe("E2E – Auth API", () => {
   const apiBase = "http://localhost:5006";
 
