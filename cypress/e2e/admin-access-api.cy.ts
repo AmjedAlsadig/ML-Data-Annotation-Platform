@@ -1,6 +1,6 @@
 // cypress/e2e/admin-access-api.cy.ts
 
-import "cypress";
+/// <reference types="cypress" />
 
 describe("E2E – Admin access control via API", () => {
   const apiBase = "http://localhost:5006";

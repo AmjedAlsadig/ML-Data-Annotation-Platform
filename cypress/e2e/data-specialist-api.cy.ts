@@ -1,3 +1,5 @@
+/// <reference types="cypress" />
+
 // cypress/e2e/data-specialist-api.cy.ts
 
 describe("E2E – Data Specialist / Project API", () => {
