@@ -1,44 +1,106 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import { app, ready } from "../../index";
+import { randomUUID } from "crypto";
 
 describe("Integration – Projects", () => {
-   let adminToken: string;
-   let ds_token: string;
-   let an_token: string;
-   let ml_token: string;
- 
-   beforeAll(async () => {
-     await ready;
+  let adminToken: string;
+  let ds_token: string;
+  let an_token: string;
+  let ml_token: string;
+  let imageId: string | undefined;
+  let createdProjectIds: string[] = [];
+  let createdLabelTypeIds: string[] = [];
+  let createdUserEmails: string[] = [];
 
-     const adminLogin = await request(app)
-       .post("/api/auth/login")
-       .send({ email: "admin_2@test.com", password: "password123" });
- 
-     adminToken = adminLogin.body.token;
-     expect(adminLogin.status).toBe(200);
-     
-     const dsLogin = await request(app)
-       .post("/api/auth/login")
-       .send({ email: "ds_2@test.com", password: "password123" });
- 
-     ds_token = dsLogin.body.token;
-     expect(dsLogin.status).toBe(200);
- 
-     const anLogin = await request(app)
-       .post("/api/auth/login")
-       .send({ email: "an_2@test.com", password: "password123" });
- 
-     an_token = anLogin.body.token;
-     expect(anLogin.status).toBe(200);
- 
-     const mlLogin = await request(app)
-       .post("/api/auth/login")
-       .send({ email: "ml_2@test.com", password: "password123" });
- 
-     ml_token = mlLogin.body.token;
-     expect(mlLogin.status).toBe(200);
-   });
+  beforeAll(async () => {
+    await ready;
+
+    const adminEmail = `admin_${randomUUID()}@test.com`;
+    const adminRes = await request(app)
+      .post("/api/auth/register")
+      .send({
+        email: adminEmail,
+        password: "password123",
+        name: "Admin",
+        firstName: "Admin",
+        lastName: "User",
+        role: "admin",
+      });
+    expect(adminRes.status).toBe(201);
+
+    const adminLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: adminEmail, password: "password123" });
+
+    adminToken = adminLogin.body.token;
+    expect(adminLogin.status).toBe(200);
+
+    const dsEmail = `ds_${randomUUID()}@test.com`;
+    const dsRes = await request(app)
+      .post("/api/auth/register")
+      .send({
+        email: dsEmail,
+        password: "password123",
+        name: "Data Specialist",
+        firstName: "Data",
+        lastName: "Specialist",
+        role: "data_specialist",
+      });
+    expect(dsRes.status).toBe(201);
+
+    const dsLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: dsEmail, password: "password123" });
+
+    ds_token = dsLogin.body.token;
+    expect(dsLogin.status).toBe(200);
+
+    const annEmail = `an_${randomUUID()}@test.com`;
+    const anRes = await request(app)
+      .post("/api/auth/register")
+      .send({
+        email: annEmail,
+        password: "password123",
+        name: "Annotator",
+        firstName: "Annnotator",
+        lastName: "user",
+        role: "annotator",
+      });
+    expect(anRes.status).toBe(201);
+
+    const anLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: annEmail, password: "password123" });
+    an_token = anLogin.body.token;
+    expect(anLogin.status).toBe(200);
+
+
+    const mlEmail = `ml_${randomUUID()}@test.com`;
+    const mlRes = await request(app)
+      .post("/api/auth/register")
+      .send({
+        email: mlEmail,
+        password: "password123",
+        name: "ML Engineer",
+        firstName: "ML",
+        lastName: "Engineer",
+        role: "ml_engineer",
+      });
+    expect(mlRes.status).toBe(201);
+    const mlLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: mlEmail, password: "password123" });
+
+    ml_token = mlLogin.body.token;
+    expect(mlLogin.status).toBe(200);
+
+    createdUserEmails.push(adminEmail);
+    createdUserEmails.push(dsEmail);
+    createdUserEmails.push(annEmail);
+    createdUserEmails.push(mlEmail);
+  });
+
 
   // ======================================================
   // GET PROJECTS
@@ -124,6 +186,7 @@ describe("Integration – Projects", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(projectId);
+    createdProjectIds.push(projectId);
   });
   
   // ================= NOT HAPPY PATH =================
@@ -135,44 +198,37 @@ describe("Integration – Projects", () => {
     expect([400, 404]).toContain(res.status);
   });
 
-  // ================= AUTOMATIC CLEANUP =================
-    afterAll(async () => {
-  
-        const timestampRegex = /\d{13}/;
-        const projectRegex = /Project/i;
-  
-        // ---------- PROJECTS ----------
-        const projectsRes = await request(app)
-          .get("/api/projects")
-          .set("Authorization", `Bearer ${ds_token}`);
-  
-        const projectsToDelete = projectsRes.body.filter((p: any) =>
-          projectRegex.test(p.name)
-        );
-  
-        for (const project of projectsToDelete) {
-          await request(app)
-            .delete(`/api/projects/${project.id}`)
-            .set("Authorization", `Bearer ${ds_token}`);
-        }
-  
-        // ---------- LABEL TYPES ----------
-        const labelsRes = await request(app)
-          .get("/api/label-types")
-          .set("Authorization", `Bearer ${ds_token}`);
-  
-        const labelTypesToDelete = labelsRes.body.data.filter((lt: any) =>
-          typeof lt.name === "string" && timestampRegex.test(lt.name)
-        );
-  
-        const ids = labelTypesToDelete.map((l: any) => l.id);
-  
-        if (ids.length > 0) {
-          await request(app)
-            .delete("/api/label-types")
-            .set("Authorization", `Bearer ${ds_token}`)
-            .send({ ids });
-        }
-      }, 30000);
-
-});
+  // ================= AUTOMATIC CLEANUP ================= 
+   afterAll(async () => {
+   for (const id of createdProjectIds) {
+     await request(app)
+       .delete(`/api/projects/${id}`)
+       .set("Authorization", `Bearer ${ds_token}`);
+   }
+   createdProjectIds = [];
+ 
+   if (createdLabelTypeIds.length) {
+     await request(app)
+       .delete("/api/label-types")
+       .set("Authorization", `Bearer ${ds_token}`)
+       .send({ ids: createdLabelTypeIds });
+   }
+   createdLabelTypeIds = [];
+ 
+   for (const email of createdUserEmails) {
+     await request(app)
+       .delete("/api/users")
+       .set("Authorization", `Bearer ${ds_token}`)
+       .send({ email });
+   }
+   createdUserEmails = [];
+ 
+   if (imageId) {
+     await request(app)
+       .delete(`/api/images/${imageId}`)
+       .set("Authorization", `Bearer ${ds_token}`);
+     imageId = undefined;
+   }
+   });
+ });
+ 

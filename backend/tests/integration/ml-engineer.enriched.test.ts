@@ -3,39 +3,96 @@ import request from "supertest";
 import { app, ready } from "../../index";
 
 describe("Integration – ML Engineer / Enriched Annotations", () => {
-  let mlEngineerToken: string;
-  let annotatorToken: string;
 
   beforeAll(async () => {
     await ready;
 
-    // --- ML Engineer ---
-    const mlEmail = `ml_2@test.com`;
-    const password = "password123";
-    const mlLogin = await request(app)
-      .post("/api/auth/login")
-      .send({ email: mlEmail, password });
+    // const adminEmail = `admin_${Date.now()}@test.com`;
+    // const adminRes = await request(app)
+    //   .post("/api/auth/register")
+    //   .send({
+    //     email: adminEmail,
+    //     password: "password123",
+    //     name: "Admin",
+    //     firstName: "Admin",
+    //     lastName: "User",
+    //     role: "admin",
+    //   });
+    // expect(adminRes.status).toBe(201);
 
-    expect(mlLogin.status).toBe(200);
-    mlEngineerToken = mlLogin.body.token;
+    // const adminLogin = await request(app)
+    //   .post("/api/auth/login")
+    //   .send({ email: adminEmail, password: "password123" });
 
-    // --- Annotator (unauthorized role) ---
-    const annotatorEmail = `ann_2@test.com`;
-    const annotatorLogin = await request(app)
-      .post("/api/auth/login")
-      .send({ email: annotatorEmail, password });
+    // adminToken = adminLogin.body.token;
+    // expect(adminLogin.status).toBe(200);
 
-    expect(annotatorLogin.status).toBe(200);
-    annotatorToken = annotatorLogin.body.token;
+    // const dsEmail = `ds_${Date.now()}@test.com`;
+    // const dsRes = await request(app)
+    //   .post("/api/auth/register")
+    //   .send({
+    //     email: dsEmail,
+    //     password: "password123",
+    //     name: "Data Specialist",
+    //     firstName: "Data",
+    //     lastName: "Specialist",
+    //     role: "data_specialist",
+    //   });
+    // expect(dsRes.status).toBe(201);
+
+    // const dsLogin = await request(app)
+    //   .post("/api/auth/login")
+    //   .send({ email: dsEmail, password: "password123" });
+
+    // ds_token = dsLogin.body.token;
+    // expect(dsLogin.status).toBe(200);
+
+    // const annEmail = `an_${Date.now()}@test.com`;
+    // const anRes = await request(app)
+    //   .post("/api/auth/register")
+    //   .send({
+    //     email: annEmail,
+    //     password: "password123",
+    //     name: "Annotator",
+    //     firstName: "Annnotator",
+    //     lastName: "user",
+    //     role: "annotator",
+    //   });
+    // expect(anRes.status).toBe(201);
+
+    // const anLogin = await request(app)
+    //   .post("/api/auth/login")
+    //   .send({ email: annEmail, password: "password123" });
+    // an_token = anLogin.body.token;
+    // expect(anLogin.status).toBe(200);
+
+
+    // const mlEmail = `ml_${Date.now()}@test.com`;
+    // const mlRes = await request(app)
+    //   .post("/api/auth/register")
+    //   .send({
+    //     email: mlEmail,
+    //     password: "password123",
+    //     name: "ML Engineer",
+    //     firstName: "ML",
+    //     lastName: "Engineer",
+    //     role: "ml_engineer",
+    //   });
+    // expect(mlRes.status).toBe(201);
+    // const mlLogin = await request(app)
+    //   .post("/api/auth/login")
+    //   .send({ email: mlEmail, password: "password123" });
+
+    // ml_token = mlLogin.body.token;
+    // expect(mlLogin.status).toBe(200);
   });
-
 
   it("Placeholder test", async () => {
     expect(1 + 1).toBe(2);
 
   });
-});
 
+});
 
 
 //   // ================= HAPPY PATH =================

@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    //environment: "node",
+    //maxConcurrency: 1,
 
     coverage: {
       provider: "v8",

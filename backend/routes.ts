@@ -730,6 +730,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         }
     });
+
+/**
+ * @swagger
+ * /api/users:
+ *   delete:
+ *     summary: Delete a user by email
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       400:
+ *         description: Invalid email
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
+app.delete("/api/users", authenticateToken, async (req, res) => {
+    try {
+        const userId = (req as any).user.id;
+        if (!userId) {
+            return res.status(401).json({ success: false, error: "Not authenticated" });
+        }
+
+        const { email } = req.body;
+
+        if (!email || typeof email !== "string") {
+            return res.status(400).json({ error: "Email is required" });
+        }
+
+        await storage.deleteUserByEmail(email);
+
+        res.json({ success: true, message: "User deleted successfully" });
+
+    } catch (error: any) {
+        console.error("Delete user error:", error);
+
+        switch (error.message) {
+            case "Invalid email":
+                return res.status(400).json({ error: "Invalid email" });
+
+            case "User not found":
+                return res.status(404).json({ error: "User not found" });
+
+            default:
+                return res.status(500).json({ error: "Internal Server Error" });
+        }
+    }
+});
+
+
 /**
  * @swagger
  * /api/users/email/{email}:
@@ -1735,9 +1802,10 @@ app.get("/api/projectsAll", authenticateToken, async (req, res) => {
      *         description: Server error
      */
     // Delete image (with MinIO cleanup)
-    app.delete("/api/images/:id", async (req, res) => {
+    app.delete("/api/images/:id", authenticateToken,async (req, res) => {
         try {
-            const userId = req.session?.userId;
+            const userId = (req as any).user.id;
+            //const userId = req.session?.userId;
             
             // Get image to extract filename
             const image = await storage.getImage(req.params.id);

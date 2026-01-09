@@ -23,7 +23,7 @@ export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  // deleteUserByEmail(id: string): Promise<void>;
+  deleteUserByEmail(id: string): Promise<void>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserRole(id: string, role: 'annotator' | 'data_specialist' | 'admin' | 'ml_engineer'): Promise<void>;
@@ -150,41 +150,41 @@ async getUser(id: string): Promise<User> {
   return user;
 }
 
-// async deleteUserByEmail(email: string): Promise<void> {
-//   if (!email || typeof email !== "string") {
-//     throw new Error("Invalid email");
-//   }
+async deleteUserByEmail(email: string): Promise<void> {
+  if (!email || typeof email !== "string") {
+    throw new Error("Invalid email");
+  }
 
-//   await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
 
-//     // 1. Fetch user id
-//     const existing = await tx
-//       .select({ id: users.id })
-//       .from(users)
-//       .where(eq(users.email, email));
+    // 1. Fetch user id
+    const existing = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email));
 
-//     if (!existing.length) {
-//       throw new Error("User not found");
-//     }
+    if (!existing.length) {
+      throw new Error("User not found");
+    }
 
-//     const userId = existing[0].id;
+    const userId = existing[0].id;
 
-//     // 2. Delete dependents FIRST
-//     await tx.delete(projects).where(eq(projects.createdBy, userId));
-//     await tx.delete(annotations).where(eq(annotations.userId, userId));
-//     await tx.delete(projectAssignments).where(eq(projectAssignments.userId, userId));
+    // 2. Delete dependents FIRST
+    await tx.delete(projects).where(eq(projects.createdBy, userId));
+    await tx.delete(annotations).where(eq(annotations.userId, userId));
+    await tx.delete(projectAssignments).where(eq(projectAssignments.userId, userId));
 
-//     // 3. Delete user
-//     const result = await tx
-//       .delete(users)
-//       .where(eq(users.id, userId))
-//       .execute();
+    // 3. Delete user
+    const result = await tx
+      .delete(users)
+      .where(eq(users.id, userId))
+      .execute();
 
-//     if ((result as any)?.rowCount === 0) {
-//       throw new Error("User not found");
-//     }
-//   });
-// }
+    if ((result as any)?.rowCount === 0) {
+      throw new Error("User not found");
+    }
+  });
+}
 
 
 async getUserByEmail(email: string): Promise<User> {
