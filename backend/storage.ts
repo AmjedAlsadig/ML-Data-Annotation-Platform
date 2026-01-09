@@ -1442,14 +1442,15 @@ async deleteImage(id: string): Promise<void> {
 }
 
 
-  async getPortfolioImages(userId: string, filters?: {
+  async getPortfolioImages(//userId: string, 
+  filters?: {
     projectId?: string;
     sortBy?: 'uploadedAt' | 'projectName';
     sortOrder?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
   }): Promise<{
-    images: Array<Image & { projectName: string; projectId: string; isAnnotated: boolean }>;
+    images: Array<Image & { projectName: string | null; projectId: string | null; isAnnotated: boolean }>;
     total: number;
     stats: {
       totalImages: number;
@@ -1479,12 +1480,12 @@ async deleteImage(id: string): Promise<void> {
         isAnnotated: sql<boolean>`CASE WHEN ${annotations.id} IS NOT NULL THEN true ELSE false END`
       })
       .from(images)
-      .innerJoin(projectImages, eq(images.id, projectImages.imageId))
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
+      .leftJoin(projectImages, eq(images.id, projectImages.imageId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
       .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId, annotations.projectId)))
       .where(
         and(
-          eq(projects.createdBy, userId),
+          // eq(projects.createdBy, userId),
           projectId ? eq(projects.id, projectId) : undefined
         )
       );
@@ -1504,11 +1505,11 @@ async deleteImage(id: string): Promise<void> {
     const totalCountQuery = db
       .select({ count: sql<number>`count(*)` })
       .from(images)
-      .innerJoin(projectImages, eq(images.id, projectImages.imageId))
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
+      .leftJoin(projectImages, eq(images.id, projectImages.imageId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
       .where(
         and(
-          eq(projects.createdBy, userId),
+          //eq(projects.createdBy, userId),
           projectId ? eq(projects.id, projectId) : undefined
         )
       );
@@ -1523,10 +1524,10 @@ async deleteImage(id: string): Promise<void> {
         annotatedImages: sql<number>`count(distinct case when ${annotations.id} is not null then ${images.id} end)`
       })
       .from(images)
-      .innerJoin(projectImages, eq(images.id, projectImages.imageId))
-      .innerJoin(projects, eq(projectImages.projectId, projects.id))
+      .leftJoin(projectImages, eq(images.id, projectImages.imageId))
+      .leftJoin(projects, eq(projectImages.projectId, projects.id))
       .leftJoin(annotations, and(eq(images.id, annotations.imageId), eq(projectImages.projectId, annotations.projectId)))
-      .where(eq(projects.createdBy, userId));
+      //.where(eq(projects.createdBy, userId));
 
     const [stats] = await statsQuery;
 

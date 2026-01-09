@@ -49,6 +49,7 @@ const PortfolioUpload = ({ onUploadSuccess }: PortfolioUploadProps) => {
                 //credentials: 'include',
                   headers: {
                     Authorization: `Bearer ${token}`,
+                    "Cache-Control": "no-store"
                 },
                 body: formData,
             });

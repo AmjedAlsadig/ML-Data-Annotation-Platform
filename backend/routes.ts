@@ -1660,7 +1660,8 @@ app.get("/api/projectsAll", authenticateToken, async (req, res) => {
         // Parse query params safely
         const { projectId, sortBy, sortOrder, limit, offset } = req.query;
 
-        const result = await storage.getPortfolioImages(userId, {
+        const result = await storage.getPortfolioImages(//userId, 
+        {
             projectId: projectId as string,
             sortBy: sortBy as 'uploadedAt' | 'projectName',
             sortOrder: sortOrder as 'asc' | 'desc',
