@@ -710,81 +710,81 @@ async getAllLabelTypes(): Promise<(Label & { classCount: number })[]> {
 }
 
 
-// async deleteLabelTypes(ids: string[]): Promise<Label[]> {
-//   if (!Array.isArray(ids)) {
-//     throw new Error("Invalid label id list");
-//   }
-
-//   if (ids.length === 0) {
-//     return [];
-//   }
-
-//   const validIds = ids.filter(id => typeof id === "string" && id.trim() !== "");
-
-//   if (validIds.length !== ids.length) {
-//     throw new Error("Invalid label id");
-//   }
-
-//   let result: Label[];
-
-//   try {
-//     result = await db
-//       .delete(labels)
-//       .where(inArray(sql`${labels.id}::text`, validIds))
-//       .returning();
-//   } catch {
-//     throw new Error("Failed to delete label types");
-//   }
-
-//   if (result.length === 0) {
-//     throw new Error("No label types found");
-//   }
-
-//   return result;
-// }
-
 async deleteLabelTypes(ids: string[]): Promise<Label[]> {
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(ids)) {
     throw new Error("Invalid label id list");
   }
 
-  const validIds = ids.filter(id =>
-    typeof id === "string" &&
-    /^[0-9a-fA-F-]{36}$/.test(id)
-  );
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const validIds = ids.filter(id => typeof id === "string" && id.trim() !== "");
 
   if (validIds.length !== ids.length) {
     throw new Error("Invalid label id");
   }
 
-  return await db.transaction(async (tx) => {
+  let result: Label[];
 
-    // 1. Verify existence
-    const existing = await tx
-      .select({ id: labels.id })
-      .from(labels)
-      .where(inArray(labels.id, validIds));
-
-    if (!existing.length) {
-      throw new Error("No label types found");
-    }
-
-    const existingIds = existing.map(r => r.id);
-
-    // 2. Delete dependent annotations FIRST
-    await tx
-      .delete(annotations)
-      .where(inArray(annotations.labelId, existingIds));
-
-    // 3. Delete label types
-    const deleted = await tx
+  try {
+    result = await db
       .delete(labels)
-      .where(inArray(labels.id, existingIds))
+      .where(inArray(sql`${labels.id}::text`, validIds))
       .returning();
+  } catch {
+    throw new Error("Failed to delete label types");
+  }
 
-    return deleted;
-  });
+  if (result.length === 0) {
+    throw new Error("No label types found");
+  }
+
+  return result;
 }
+
+// async deleteLabelTypes(ids: string[]): Promise<Label[]> {
+//   if (!Array.isArray(ids) || ids.length === 0) {
+//     throw new Error("Invalid label id list");
+//   }
+
+//   const validIds = ids.filter(id =>
+//     typeof id === "string" &&
+//     /^[0-9a-fA-F-]{36}$/.test(id)
+//   );
+
+//   if (validIds.length !== ids.length) {
+//     throw new Error("Invalid label id");
+//   }
+
+//   return await db.transaction(async (tx) => {
+
+//     // 1. Verify existence
+//     const existing = await tx
+//       .select({ id: labels.id })
+//       .from(labels)
+//       .where(inArray(labels.id, validIds));
+
+//     if (!existing.length) {
+//       throw new Error("No label types found");
+//     }
+
+//     const existingIds = existing.map(r => r.id);
+
+//     // 2. Delete dependent annotations FIRST
+//     await tx
+//       .delete(annotations)
+//       .where(inArray(annotations.labelId, existingIds));
+
+//     // 3. Delete label types
+//     const deleted = await tx
+//       .delete(labels)
+//       .where(inArray(labels.id, existingIds))
+//       .returning();
+
+//     return deleted;
+//   });
+//}
 
 
   // Label Class Methods

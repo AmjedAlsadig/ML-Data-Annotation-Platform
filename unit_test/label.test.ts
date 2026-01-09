@@ -37,7 +37,7 @@ beforeEach(() => {
 describe("Label – createLabel", () => {
   test("creates label (happy path)", async () => {
     const newLabel = {
-      id: "l1",
+      id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47",
       name: "Type A",
       description: "Test label",
       projectId: "p1",
@@ -112,7 +112,7 @@ describe("Label – deleteLabel", () => {
 
     const storage = new DbStorage();
 
-    await expect(storage.deleteLabel("l1")).resolves.toBeUndefined();
+    await expect(storage.deleteLabel("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47")).resolves.toBeUndefined();
   });
 
   test("throws on invalid label id", async () => {
@@ -131,7 +131,7 @@ describe("Label – deleteLabel", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.deleteLabel("l1")
+      storage.deleteLabel("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47")
     ).rejects.toThrow("Failed to delete label");
   });
 
@@ -145,7 +145,7 @@ describe("Label – deleteLabel", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.deleteLabel("l1")
+      storage.deleteLabel("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47")
     ).rejects.toThrow("Label not found");
   });
 });
@@ -156,9 +156,9 @@ describe("Label – deleteLabel", () => {
 describe("Label – addLabelClass", () => {
   test("adds label class (happy path)", async () => {
     const labelClass = {
-      id: "c1",
+      id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48",
       name: "Class A",
-      labelTypeId: "l1",
+      labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47",
     };
 
     (db.insert as any).mockReturnValueOnce({
@@ -171,7 +171,7 @@ describe("Label – addLabelClass", () => {
 
     const result = await storage.addLabelClass({
       name: "Class A",
-      labelTypeId: "l1",
+      labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47",
     } as any);
 
     expect(result).toEqual(labelClass);
@@ -189,7 +189,7 @@ describe("Label – addLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.addLabelClass({ name: "", labelTypeId: "l1" } as any)
+      storage.addLabelClass({ name: "", labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47" } as any)
     ).rejects.toThrow("Invalid label class payload");
   });
 
@@ -201,7 +201,7 @@ describe("Label – addLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.addLabelClass({ name: "Class A", labelTypeId: "l1" } as any)
+      storage.addLabelClass({ name: "Class A", labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47" } as any)
     ).rejects.toThrow("DB insert failed");
   });
 
@@ -215,7 +215,7 @@ describe("Label – addLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.addLabelClass({ name: "Class A", labelTypeId: "l1" } as any)
+      storage.addLabelClass({ name: "Class A", labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47" } as any)
     ).rejects.toThrow("Failed to create label class");
   });
 });
@@ -226,9 +226,9 @@ describe("Label – addLabelClass", () => {
 describe("Label – removeLabelClass", () => {
   test("removes label class (happy path)", async () => {
     const existingClass = {
-      id: "c1",
+      id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48",
       name: "Class A",
-      labelTypeId: "l1",
+      labelTypeId: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47",
     };
 
     (db.delete as any).mockReturnValueOnce({
@@ -239,7 +239,7 @@ describe("Label – removeLabelClass", () => {
 
     const storage = new DbStorage();
 
-    const result = await storage.removeLabelClass("l1", "c1");
+    const result = await storage.removeLabelClass("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48");
 
     expect(result).toEqual(existingClass);
   });
@@ -248,7 +248,7 @@ describe("Label – removeLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.removeLabelClass("" as any, "c1")
+      storage.removeLabelClass("" as any, "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48")
     ).rejects.toThrow("Invalid label type id");
   });
 
@@ -256,7 +256,7 @@ describe("Label – removeLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.removeLabelClass("l1", "" as any)
+      storage.removeLabelClass("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "" as any)
     ).rejects.toThrow("Invalid label class id");
   });
 
@@ -268,7 +268,7 @@ describe("Label – removeLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.removeLabelClass("l1", "c1")
+      storage.removeLabelClass("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48")
     ).rejects.toThrow("Failed to remove label class");
   });
 
@@ -282,7 +282,7 @@ describe("Label – removeLabelClass", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.removeLabelClass("l1", "c1")
+      storage.removeLabelClass("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48")
     ).rejects.toThrow("Label class not found");
   });
 });
@@ -293,8 +293,8 @@ describe("Label – removeLabelClass", () => {
 describe("Label – label types (getAll / getOne / update / delete)", () => {
   test("getAllLabelTypes returns label types with classCount (happy path)", async () => {
     const rows = [
-      { id: "l1", name: "Type A", classCount: 2 },
-      { id: "l2", name: "Type B", classCount: 0 },
+      { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", name: "Type A", classCount: 2 },
+      { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48", name: "Type B", classCount: 0 },
     ];
 
     (db.select as any).mockReturnValueOnce({
@@ -324,7 +324,7 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
   });
 
   test("getLabelType returns single label type (happy path)", async () => {
-    const row = { id: "l1", name: "Type A", classCount: 3 };
+    const row = { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", name: "Type A", classCount: 3 };
 
     (db.select as any).mockReturnValueOnce({
       from: vi.fn().mockReturnThis(),
@@ -334,9 +334,9 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     });
 
     const storage = new DbStorage();
-    const result = await storage.getLabelType("l1");
+    const result = await storage.getLabelType("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47");
 
-    expect(result?.id).toBe("l1");
+    expect(result?.id).toBe("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47");
     expect(result?.classCount).toBe(3);
   });
 
@@ -371,12 +371,12 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.getLabelType("l1")
+      storage.getLabelType("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47")
     ).rejects.toThrow("Failed to fetch label type");
   });
 
   test("updateLabelType updates and returns label type (happy path)", async () => {
-    const updated = { id: "l1", name: "Updated", description: "desc" };
+    const updated = { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", name: "Updated", description: "desc" };
 
     (db.update as any).mockReturnValueOnce({
       set: () => ({
@@ -387,7 +387,7 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     });
 
     const storage = new DbStorage();
-    const result = await storage.updateLabelType("l1", {
+    const result = await storage.updateLabelType("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", {
       name: "Updated",
     } as any);
 
@@ -426,14 +426,14 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.updateLabelType("l1", { name: "Updated" } as any)
+      storage.updateLabelType("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", { name: "Updated" } as any)
     ).rejects.toThrow("Label type not found");
   });
 
   test("deleteLabelTypes deletes label types (happy path)", async () => {
     const deleted = [
-      { id: "l1", name: "Type A" },
-      { id: "l2", name: "Type B" },
+      { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", name: "Type A" },
+      { id: "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48", name: "Type B" },
     ];
 
     (db.delete as any).mockReturnValueOnce({
@@ -443,10 +443,10 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     });
 
     const storage = new DbStorage();
-    const result = await storage.deleteLabelTypes(["l1", "l2"]);
+    const result = await storage.deleteLabelTypes(["9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48"]);
 
     expect(result.length).toBe(2);
-    expect(result[0].id).toBe("l1");
+    expect(result[0].id).toBe("9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47");
   });
 
   test("deleteLabelTypes throws when DB delete fails", async () => {
@@ -457,7 +457,7 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.deleteLabelTypes(["l1", "l2"])
+      storage.deleteLabelTypes(["9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47", "9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a48"])
     ).rejects.toThrow("Failed to delete label types");
   });
 
@@ -471,7 +471,7 @@ describe("Label – label types (getAll / getOne / update / delete)", () => {
     const storage = new DbStorage();
 
     await expect(
-      storage.deleteLabelTypes(["l1"])
+      storage.deleteLabelTypes(["9f4c8b3e-2e3a-4c6a-9c21-1a2e9f6c3a47"])
     ).rejects.toThrow("No label types found");
   });
 });
