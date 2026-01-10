@@ -376,6 +376,11 @@ export default function AnnotationInterface() {
       return;
     }
 
+    if (!selectedLabelClassId) {
+      setError('Please select a label class before publishing.');
+      return;
+    }
+
     setIsPublishing(true);
     setError(null);
 
@@ -677,7 +682,7 @@ export default function AnnotationInterface() {
                         <Button
                           className="w-full bg-green-600 hover:bg-green-700 text-white"
                           onClick={handlePublish}
-                          disabled={isPublishing}
+                          disabled={isPublishing || (!currentImage?.published && !selectedLabelClassId)}
                           data-testid="button-publish"
                         >
                           {isPublishing ? 'Publishing...' : currentImage?.published ? 'Next Image' : 'Publish & Next'}
