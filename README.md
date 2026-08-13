@@ -1,6 +1,35 @@
-# ML Data Platform
+# ML Data Annotation Platform
 
 This is a full-stack application for managing and annotating machine learning data.
+
+## Project Context & Contributions
+This repository is a forked version of a full-stack SaaS platform developed as part of a collaborative team project at Politecnico di Milano. The platform covers the full data lifecycle for a computer vision project: data specialists upload and organize images, annotators label them, and ML engineers pull the finished datasets through dedicated endpoints.
+
+## Key Features
+* **Role-Based Access Control (RBAC):** Distinct permissions, authorized routes, and tailored UI views for Admins, Data Specialists, Annotators, and ML Engineers.
+* **Project & Dataset Management:** Streamlined workflows for creating projects, bulk-uploading images via S3, assigning annotator tasks, and tracking dataset publication status.
+* **Interactive Annotation Workflow:** Dynamic web interface for tagging images, complete with taxonomy management (label types/classes) and real-time project statistics.
+* **ML Engineering API:** Dedicated, read-only REST endpoints enabling ML pipelines to pull published images, labels, and taxonomies (including bulk downloads) directly into downstream models.
+* **Enterprise-Grade Security:** JWT-based authentication with comprehensive registration, login, logout, and secure password-reset flows.
+
+## Tech Stack
+* **Frontend:** React, TypeScript, Vite, Tailwind CSS, Radix UI, TanStack Query, React Hook Form, Wouter
+* **Backend:** Node.js, Express, TypeScript, Drizzle ORM, PostgreSQL (Neon-compatible), Passport + JWT Auth, Swagger
+* **Infrastructure:** Docker, MinIO (Object Storage)
+* **Testing:** Vitest, Jest, Cypress, Supertest
+
+
+## System Architecture
+The platform implements a strict three-tier layered architecture to ensure scalability, security, and separation of concerns:
+1. **Presentation Layer (Frontend):** A responsive Single Page Application (SPA) providing dedicated dashboard interfaces for dataset management and an interactive image labeling tool.
+2. **Application Layer (Backend):** A Node.js service exposing stateless RESTful endpoints, managing authentication, input validation, and core business logic.
+3. **Data Layer (Storage & Database):** PostgreSQL acts as the definitive single source of truth for all structured metadata. MinIO handles the large binary image files, ensuring database query performance remains highly optimized at scale.
+
+## API Documentation
+Interactive API documentation is automatically generated and served via Swagger UI. Once the application is running, the documentation can be accessed at: `http://localhost:5006/api-docs/`
+
+## Local Development & Deployment
+The application and its core infrastructure services are containerized for highly reproducible deployments across environments.
 
 ## Prerequisites
 
@@ -94,10 +123,6 @@ npm run test:coverage
 ```
 View HTML report: open [coverage/index.html](file:///Users/vivek/Documents/GitHub/ml-data-platform/coverage/index.html) locally after running the command.
 
-### Swagger URL
-
-The Swagger documentation can be found at [http://localhost:5006/api-docs/](http://localhost:5006/api-docs/).
-
 #### 8. Build for Production
 
 When you are ready to deploy your application, you need to create a production build. This command will bundle and optimize your code into a `dist` directory.
@@ -122,3 +147,24 @@ To see a list of all databases, run the following command:
 ```bash
 docker exec -it ml-data-platform-db-1 psql -U user -d ml-data-platform -c "\l"
 ```
+
+## My Contributions
+This project was built as part of a team (see Collaborators below). My work focused on:
+
+* APIs & Validation: Built secure backend APIs with robust request validation.
+* Architecture: Developed the core database repositories, services, and middlewares.
+* Testing: Implemented comprehensive unit and integration testing environments.
+* Frontend Integration: Partnered with the frontend team to connect and integrate UI endpoints seamlessly.
+* Documentation: Authored and maintained clear API documentation via Swagger.
+* Bug Fixing: Consistently tracked, managed, and resolved backend bugs.
+
+## Collaborators
+Built as a team project with:
+* [Amr-Ahmed-Elmasry](https://github.com/Amr-Ahmed-Elmasry)
+* [MilagrosCasaperalta](https://github.com/MilagrosCasaperalta)
+* [viveksharma12527](https://github.com/viveksharma12527)
+* [AlessioGesuelliUnicam](https://github.com/AlessioGesuelliUnicam)
+* [lazovicnikola](https://github.com/lazovicnikola)
+* [arben-djokovic](https://github.com/arben-djokovic)
+
+The original collaborative repository and full team commit history can be found [here](https://github.com/viveksharma12527/ml-data-platform/tree/integration_test_fix)
