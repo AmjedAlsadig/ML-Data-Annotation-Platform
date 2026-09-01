@@ -88,7 +88,7 @@ docker-compose up -d
 
 #### 4. Initialize the Database Schema
 
-**⚠️ This step is required only the first time you set up the project or after schema changes.**
+** This step is required only the first time you set up the project or after schema changes.**
 
 This command will synchronize your database schema with the definitions in the code, creating all necessary tables:
 ```bash
